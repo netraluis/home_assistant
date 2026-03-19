@@ -1,84 +1,112 @@
-# Home Assistant Node - Proyecto Andorra
+# Home Control - Proyecto Andorra
 
-Este proyecto consiste en un nodo centralizado basado en Raspberry Pi para el control de sensores y actuadores de un hogar inteligente, utilizando Home Assistant, Node.js y PostgreSQL.
+Sistema de domótica custom basado en Raspberry Pi para el control de sensores y actuadores de un hogar inteligente, usando Node.js, MQTT y PostgreSQL. Sin Home Assistant — control directo vía Zigbee2MQTT.
+
+## Arquitectura
+
+```
+Sensores ← Zigbee → Dongle USB → Zigbee2MQTT → Mosquitto (MQTT) → Node.js Backend
+                                                                        ↓
+                                                                   PostgreSQL
+                                                                        ↓
+                                                                    API REST
+                                                                        ↓
+                                                                   UI / PWA
+```
 
 ## Hardware Necesario
 
-### 1. Servidor Central
-- **Raspberry Pi 4 o 5** (Se recomienda 4GB de RAM o superior).
-- **SSD Externo (SATA o NVMe)**: Para evitar fallos prematuros de la tarjeta SD debido a las escrituras de la base de datos.
-- **Fuente de Alimentación Oficial**: Para asegurar estabilidad de voltaje.
+### Servidor Central
+- **Raspberry Pi 4 o 5** (4GB RAM o superior)
+- **SSD Externo (SATA o NVMe)**: Para evitar fallos de la tarjeta SD
+- **Fuente de Alimentación Oficial**
 
-### 2. Conectividad Zigbee
-- **Zigbee Dongle USB**: (Ej: Sonoff ZBDongle-E o ZBDongle-P). Esencial para conectar dispositivos Zigbee sin depender de hubs propietarios.
+### Conectividad Zigbee
+- **Zigbee Dongle USB**: (Ej: Sonoff ZBDongle-E o ZBDongle-P)
 
-### 3. Sensores y Actuadores
-- **Iluminación**: Bombillas **IKEA Tradfri** (Protocolo Zigbee).
-- **Presencia**: **Aqara FP2** (Sensor mmWave). *Nota: El FP2 se conecta vía Wi-Fi, pero se integra muy bien con Home Assistant.*
-- **Clima**: Válvulas termostáticas (TRV) Zigbee (Ej: **Aqara TRV**, **Moes** o **Danfoss Ally**).
+### Sensores y Actuadores
+- **Iluminación**: Bombillas **IKEA Tradfri** (Zigbee)
+- **Presencia**: **Aqara FP2** (mmWave, Wi-Fi)
+- **Clima**: Válvulas termostáticas Zigbee (Ej: **Aqara TRV**, **Moes**, **Danfoss Ally**)
 - **Seguridad**:
-    - Sensores de inundación Zigbee (Ej: **Aqara Water Leak Sensor**).
-    - Sensores de apertura de puertas/ventanas Zigbee (Ej: **Aqara Door and Window Sensor**).
-    - **Control Vitrocerámica**: Para detectar si la vitro está encendida, se recomienda un **Shelly EM** con pinza amperimétrica en el cuadro eléctrico o un sensor de temperatura/vibración específico si es posible.
+    - Sensores de inundación (Ej: **Aqara Water Leak Sensor**)
+    - Sensores de puertas/ventanas (Ej: **Aqara Door and Window Sensor**)
+    - Control Vitrocerámica: **Shelly EM** con pinza amperimétrica
 
 ## Stack Tecnológico
-- **Home Assistant Container**: El núcleo de la domótica.
-- **Node.js**: Para servicios personalizados y lógica de negocio.
-- **PostgreSQL**: Base de datos para persistencia a largo plazo.
-- **Drizzle ORM**: Para la interacción con la base de datos desde Node.js.
-- **Zigbee2MQTT**: Para gestionar la red Zigbee de forma abierta y potente.
-- **Mosquitto MQTT**: Broker para la comunicación entre dispositivos.
+
+- **Node.js + TypeScript**: Backend, API REST y lógica de negocio
+- **Express**: Servidor HTTP y API
+- **MQTT (mqtt.js)**: Comunicación con dispositivos vía Mosquitto
+- **PostgreSQL**: Persistencia de datos e históricos
+- **Drizzle ORM**: Interacción con la base de datos
+- **Zigbee2MQTT**: Gestión de la red Zigbee
+- **Mosquitto**: Broker MQTT
 
 ## Estructura del Proyecto
-- `/data`: Volúmenes persistentes de Docker.
-- `/services`: Código fuente de los microservicios en Node.js.
-- `docker-compose.yml`: Orquestación de contenedores.
+
+```
+├── docker-compose.yml          # Orquestación de contenedores
+├── .env / .env.example         # Configuración
+├── data/                       # Volúmenes persistentes (git-ignored)
+│   ├── postgres/
+│   ├── mosquitto/
+│   └── zigbee2mqtt/
+└── services/                   # Backend Node.js
+    ├── Dockerfile
+    ├── package.json
+    ├── drizzle.config.ts
+    └── src/
+        ├── index.ts            # Backend principal (Express + MQTT + DB)
+        ├── sensors.ts          # Definición de sensores
+        ├── mock_sensors.ts     # Simulación de sensores vía MQTT
+        └── db/
+            └── schema.ts       # Schema de PostgreSQL (Drizzle)
+```
 
 ## Instrucciones de Inicio
 
-1. **Configuración Inicial**:
-   - Copia `.env.example` a `.env` y ajusta las credenciales.
-   - Si estás en macOS, Docker Desktop ya maneja la virtualización. En RPi, asegúrate de tener Docker y Docker Compose instalados.
+### 1. Configuración
 
-2. **Levantar la Infraestructura**:
-   ```bash
-   docker-compose up -d
-   ```
+```bash
+cp .env.example .env
+# Editar .env con tus credenciales
+```
 
-3. **Simulación de Sensores (Mocking)**:
-   Para probar la API de Home Assistant sin hardware real:
-   - **Obtener Token de Acceso**: 
-     1. Entra en `http://localhost:8123`.
-     2. Crea tu cuenta de usuario si es la primera vez.
-     3. Haz clic en tu **Perfil** (círculo con tus iniciales abajo a la izquierda).
-     4. Ve a la pestaña **Seguridad** y baja hasta el final.
-     5. Haz clic en **Crear Token** en la sección "Tokens de acceso de larga duración".
-     6. Ponle un nombre (ej: `NodeJS_Backend`) y copia el código generado.
-   - **Configurar .env**: Pega el código en la variable `HASS_TOKEN`.
-   - **Ejecutar**:
-     ```bash
-     cd services
-     npm run mock
-     ```
+### 2. Levantar la infraestructura
 
-4. **Base de Datos**:
-   Para sincronizar el esquema de Drizzle con PostgreSQL:
-   ```bash
-   cd services
-   npm run db:push
-   ```
+```bash
+docker-compose up -d
+```
 
-## 🚀 Paso a Producción (Raspberry Pi)
+Esto levanta: PostgreSQL, Mosquitto, Zigbee2MQTT y el backend Node.js.
 
-Cuando muevas este proyecto a la Raspberry Pi, considera estos ajustes para un rendimiento óptimo:
+### 3. Inicializar la base de datos
 
-1.  **Descubrimiento de Dispositivos (Crucial)**:
-    En `docker-compose.yml`, descomenta `# network_mode: host` y comenta la sección `ports` en el servicio `homeassistant`.
-    *   *Por qué:* Esto permite que Home Assistant escanee tu red Wi-Fi/LAN para encontrar dispositivos (Google Cast, HomeKit, etc.) automáticamente.
+```bash
+cd services
+npm install
+npm run db:push
+```
 
-2.  **Conexión Interna (Docker DNS)**:
-    Si tu aplicación Node.js corre **dentro** de Docker (contenedor `app`), en el archivo `.env` de la RPi deberías usar:
-    ```env
-    HASS_URL=http://homeassistant:8123
-    ```
-    Si corres scripts manualmente desde la terminal de la RPi, `http://localhost:8123` seguirá funcionando.
+### 4. Arrancar el backend (desarrollo local)
+
+```bash
+npm start
+# Abre http://localhost:3000
+```
+
+### 5. Simular sensores (sin hardware)
+
+```bash
+npm run mock
+```
+
+Publica datos falsos en MQTT cada 10 segundos. El backend los recibe, los guarda en PostgreSQL y los muestra en la UI.
+
+## Producción (Raspberry Pi)
+
+1. Conectar el dongle Zigbee USB
+2. En `docker-compose.yml`, descomentar la línea `devices` para mapear `/dev/ttyACM0`
+3. Emparejar dispositivos desde el panel de Zigbee2MQTT (http://localhost:8080)
+4. Los dispositivos publicarán automáticamente en MQTT y el backend los procesará

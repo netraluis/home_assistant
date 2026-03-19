@@ -14,12 +14,14 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "axios": "^1.13.5",
     "dotenv": "^17.2.4",
     "drizzle-orm": "^0.45.1",
+    "express": "^5.2.1",
+    "mqtt": "^5.15.0",
     "pg": "^8.18.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/pg": "^8.16.0",
     "drizzle-kit": "^0.31.9",
     "ts-node": "^10.9.2",

@@ -2,44 +2,49 @@
 
 ## Project Overview
 
-Home Assistant Node - Proyecto Andorra. A centralized home automation hub based on Raspberry Pi for controlling smart home sensors and actuators using Home Assistant, Node.js/TypeScript, and PostgreSQL. All services run via Docker Compose.
+Home Control - Proyecto Andorra. Sistema de domótica custom basado en Raspberry Pi. Control directo de sensores y actuadores vía Zigbee2MQTT + MQTT, sin Home Assistant. Backend en Node.js/TypeScript con PostgreSQL.
 
 ## Architecture
 
-- **homeassistant**: Core HA platform (port 8123)
+```
+Sensors ← Zigbee → Zigbee2MQTT → Mosquitto (MQTT) → Node.js Backend → PostgreSQL
+                                                          ↓
+                                                       API REST → UI / PWA
+```
+
+Services (Docker Compose):
 - **postgres**: PostgreSQL 16 for sensor data persistence (port 5432)
 - **mosquitto**: MQTT broker for device communication (port 1883)
 - **zigbee2mqtt**: Zigbee device management (port 8080, requires USB dongle on RPi)
-- **app**: Custom Node.js/TypeScript backend (`./services/`)
-
-All services are orchestrated via `docker-compose.yml`. Persistent data lives in `data/` (git-ignored).
+- **app**: Custom Node.js/TypeScript backend (port 3000)
 
 ## Tech Stack
 
 - **Runtime**: Node.js 20 (Alpine) with TypeScript 5.9
+- **HTTP**: Express 5
+- **MQTT**: mqtt.js for subscribing/publishing to Mosquitto
 - **ORM**: Drizzle ORM 0.45.1 (PostgreSQL dialect)
-- **HTTP**: Axios for HA API calls
-- **MQTT**: Mosquitto 2
+- **DB**: PostgreSQL 16
 - **Zigbee**: Zigbee2MQTT
 - **Config**: dotenv (`.env` at project root)
 
 ## Project Structure
 
 ```
-├── docker-compose.yml          # Service orchestration
-├── .env / .env.example         # Environment config
+├── docker-compose.yml
+├── .env / .env.example
 ├── data/                       # Persistent volumes (git-ignored)
-│   ├── homeassistant/          # HA config
-│   ├── postgres/               # DB files
-│   ├── mosquitto/              # MQTT config/data/logs
-│   └── zigbee2mqtt/            # Zigbee data
+│   ├── postgres/
+│   ├── mosquitto/
+│   └── zigbee2mqtt/
 └── services/                   # Node.js backend
-    ├── Dockerfile              # Node 20 Alpine image
-    ├── drizzle.config.ts       # ORM config
-    ├── package.json            # Dependencies & scripts
+    ├── Dockerfile
+    ├── drizzle.config.ts
+    ├── package.json
     └── src/
-        ├── index.ts            # Main entry point (pg pool + sensor schema)
-        ├── mock_sensors.ts     # Simulates 6 sensor types via HA API
+        ├── index.ts            # Main backend (Express + MQTT + Drizzle)
+        ├── sensors.ts          # Sensor definitions (shared config)
+        ├── mock_sensors.ts     # MQTT-based sensor simulator
         └── db/
             └── schema.ts       # sensorData table (Drizzle)
 ```
@@ -53,42 +58,50 @@ docker-compose logs -f          # Follow logs
 
 # Backend (from ./services/)
 npm install                     # Install dependencies
-npm start                       # Run main service (ts-node src/index.ts)
-npm run mock                    # Run sensor simulation
+npm start                       # Run backend (Express + MQTT listener)
+npm run mock                    # Simulate sensors via MQTT
 npm run db:push                 # Apply schema to PostgreSQL
 npm run db:generate             # Generate migration files
 ```
+
+## API Endpoints
+
+- `GET  /api/sensors`           — List all sensors with current state
+- `GET  /api/sensor/:entityId`  — Get current state of a sensor
+- `POST /api/sensor/:entityId`  — Control a device (publishes to MQTT)
+- `GET  /api/history/:entityId` — Query historical data from PostgreSQL
 
 ## Database Schema
 
 Single table `sensor_data`:
 - `id`: serial PK
 - `sensor_id`: text (device identifier)
-- `type`: text (temp, humidity, presence, etc.)
+- `type`: text (light, toggle, slider)
 - `value`: double precision (nullable)
-- `unit`: text (nullable, e.g. °C, %, W)
+- `unit`: text (nullable)
 - `timestamp`: auto-generated
+
+## MQTT Topics
+
+- **Receive**: `zigbee2mqtt/<device_name>` — device state updates (JSON)
+- **Control**: `zigbee2mqtt/<device_name>/set` — send commands to devices
 
 ## Environment Variables
 
-Defined in `.env` (see `.env.example` for template):
+Defined in `.env` (see `.env.example`):
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` — DB credentials
-- `DATABASE_URL` — Full connection string for Drizzle/pg
-- `HASS_TOKEN` — Long-lived access token from HA
-- `HASS_URL` — HA base URL (http://localhost:8123 dev, http://homeassistant:8123 docker)
-- `HASS_TIMEZONE` — Europe/Andorra
-- `MQTT_USER`, `MQTT_PASSWORD` — MQTT broker credentials
-- `DOCKER_NETWORK_MODE` — `bridge` (macOS dev) or `host` (RPi prod)
-
-## Development vs Production
-
-- **Dev (macOS)**: `network_mode: bridge` with exposed ports. No USB device mapping.
-- **Prod (RPi)**: `network_mode: host` for mDNS/UPnP device discovery. Map `/dev/ttyACM0` for Zigbee dongle.
+- `DATABASE_URL` — Full connection string
+- `MQTT_HOST`, `MQTT_PORT` — MQTT broker (default: localhost:1883)
+- `MQTT_USER`, `MQTT_PASSWORD` — MQTT auth
+- `PORT` — Backend port (default: 3000)
+- `TZ` — Timezone (Europe/Andorra)
 
 ## Conventions
 
 - TypeScript for all backend code
-- Drizzle ORM for database operations (no raw SQL unless necessary)
+- Drizzle ORM for database operations
+- MQTT for all device communication (no direct hardware access)
+- Sensor definitions centralized in `src/sensors.ts`
 - Environment variables loaded via dotenv from root `.env`
 - Docker Compose for all service management
-- Language: project documentation is in Spanish
+- Project documentation in Spanish

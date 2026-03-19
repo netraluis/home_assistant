@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Home Control - Proyecto Andorra</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 0.5rem;
+      font-size: 1.5rem;
+      color: #fff;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #888;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+    }
+
+    /* MQTT Status Panel */
+    .mqtt-panel {
+      max-width: 1000px;
+      margin: 0 auto 1.5rem;
+      background: #16213e;
+      border-radius: 10px;
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .mqtt-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .mqtt-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #f44336;
+      transition: background 0.3s;
+    }
+
+    .mqtt-dot.connected { background: #4caf50; animation: pulse 2s infinite; }
+    .mqtt-dot.disconnected { background: #f44336; }
+    .mqtt-dot.loading { background: #ff9800; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .mqtt-label { font-weight: 600; font-size: 0.9rem; }
+
+    .mqtt-info {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .mqtt-stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .mqtt-stat-value {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #4fc3f7;
+    }
+
+    .mqtt-stat-label {
+      font-size: 0.7rem;
+      color: #666;
+      text-transform: uppercase;
+    }
+
+    #sensors {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.2rem;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 2px solid transparent;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    .card.success { border-color: #4caf50; box-shadow: 0 0 12px rgba(76,175,80,0.3); }
+    .card.error { border-color: #f44336; box-shadow: 0 0 12px rgba(244,67,54,0.3); }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .card-icon { font-size: 1.8rem; }
+    .card-name { font-size: 1rem; font-weight: 600; }
+    .card-topic { font-size: 0.7rem; color: #4fc3f7; font-family: monospace; }
+    .card-state { font-size: 0.85rem; color: #888; margin-bottom: 0.25rem; }
+
+    .card-lastseen {
+      font-size: 0.7rem;
+      color: #555;
+      margin-bottom: 1rem;
+    }
+
+    .card-lastseen.active { color: #4caf50; }
+    .card-lastseen.stale { color: #ff9800; }
+    .card-lastseen.none { color: #555; }
+
+    .toggle-btn {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .toggle-btn.off { background: #2a2a4a; color: #888; }
+    .toggle-btn.on { background: #4caf50; color: #fff; }
+    .toggle-btn.on.danger { background: #f44336; }
+
+    .slider-container { display: flex; flex-direction: column; gap: 0.5rem; }
+    .slider-row { display: flex; align-items: center; gap: 1rem; }
+
+    input[type="range"] {
+      flex: 1;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: #2a2a4a;
+      border-radius: 3px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #4fc3f7;
+      cursor: pointer;
+    }
+
+    .slider-value {
+      min-width: 65px;
+      text-align: right;
+      font-weight: 600;
+      font-size: 1.1rem;
+      color: #4fc3f7;
+    }
+
+    .light-controls { display: flex; flex-direction: column; gap: 0.75rem; }
+
+    .brightness-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.85rem;
+      color: #888;
+    }
+
+    .brightness-row input[type="range"] { flex: 1; }
+    .brightness-row .slider-value { font-size: 0.95rem; }
+
+    .loading { text-align: center; padding: 3rem; color: #666; font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <h1>Home Control</h1>
+  <p class="subtitle">Proyecto Andorra</p>
+
+  <div class="mqtt-panel">
+    <div class="mqtt-status">
+      <span class="mqtt-dot loading" id="mqttDot"></span>
+      <span class="mqtt-label" id="mqttLabel">Conectando...</span>
+    </div>
+    <div class="mqtt-info">
+      <div class="mqtt-stat">
+        <span class="mqtt-stat-value" id="mqttHost">-</span>
+        <span class="mqtt-stat-label">Broker</span>
+      </div>
+      <div class="mqtt-stat">
+        <span class="mqtt-stat-value" id="mqttMessages">0</span>
+        <span class="mqtt-stat-label">Mensajes</span>
+      </div>
+      <div class="mqtt-stat">
+        <span class="mqtt-stat-value" id="mqttLastMsg">-</span>
+        <span class="mqtt-stat-label">Ultimo mensaje</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="sensors"><div class="loading">Cargando sensores...</div></div>
+
+  <script>
+    const container = document.getElementById('sensors');
+    const mqttDot = document.getElementById('mqttDot');
+    const mqttLabel = document.getElementById('mqttLabel');
+    const mqttHost = document.getElementById('mqttHost');
+    const mqttMessages = document.getElementById('mqttMessages');
+    const mqttLastMsg = document.getElementById('mqttLastMsg');
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return '-';
+      const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+      if (diff < 5) return 'ahora';
+      if (diff < 60) return Math.floor(diff) + 's';
+      if (diff < 3600) return Math.floor(diff / 60) + 'min';
+      return Math.floor(diff / 3600) + 'h';
+    }
+
+    function lastSeenClass(dateStr) {
+      if (!dateStr) return 'none';
+      const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+      if (diff < 30) return 'active';
+      return 'stale';
+    }
+
+    async function updateMqttStatus() {
+      try {
+        const res = await fetch('/api/status');
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const m = data.mqtt;
+
+        mqttDot.className = 'mqtt-dot ' + (m.connected ? 'connected' : 'disconnected');
+        mqttLabel.textContent = m.connected ? 'MQTT Conectado' : 'MQTT Desconectado';
+        mqttHost.textContent = m.host;
+        mqttMessages.textContent = m.messageCount;
+        mqttLastMsg.textContent = timeAgo(m.lastMessage);
+      } catch {
+        mqttDot.className = 'mqtt-dot disconnected';
+        mqttLabel.textContent = 'Backend no disponible';
+      }
+    }
+
+    function flashCard(card, type) {
+      card.classList.add(type);
+      setTimeout(() => card.classList.remove(type), 800);
+    }
+
+    async function updateSensor(entityId, state, attributes, card) {
+      try {
+        const res = await fetch(`/api/sensor/${entityId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state, attributes }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        flashCard(card, 'success');
+        return true;
+      } catch (e) {
+        flashCard(card, 'error');
+        return false;
+      }
+    }
+
+    function isDangerSensor(sensor) {
+      return ['binary_sensor.fuga_agua_cocina'].includes(sensor.entityId);
+    }
+
+    function renderToggle(sensor, currentState, card) {
+      const isOn = currentState === 'on';
+      const danger = isDangerSensor(sensor);
+      const btn = document.createElement('button');
+      btn.className = 'toggle-btn ' + (isOn ? 'on' : 'off') + (danger && isOn ? ' danger' : '');
+      btn.textContent = isOn ? 'ON' : 'OFF';
+      btn.addEventListener('click', async () => {
+        const newState = btn.classList.contains('on') ? 'off' : 'on';
+        const ok = await updateSensor(sensor.entityId, newState, sensor.attributes, card);
+        if (ok) {
+          btn.className = 'toggle-btn ' + newState + (danger && newState === 'on' ? ' danger' : '');
+          btn.textContent = newState.toUpperCase();
+          card.querySelector('.card-state').textContent = 'Estado: ' + newState;
+        }
+      });
+      return btn;
+    }
+
+    function renderSlider(sensor, currentValue, card) {
+      const r = sensor.range;
+      const wrap = document.createElement('div');
+      wrap.className = 'slider-container';
+      const row = document.createElement('div');
+      row.className = 'slider-row';
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = r.min;
+      input.max = r.max;
+      input.step = r.step;
+      input.value = currentValue ?? r.min;
+      const val = document.createElement('span');
+      val.className = 'slider-value';
+      val.textContent = input.value + ' ' + r.unit;
+      input.addEventListener('input', () => { val.textContent = input.value + ' ' + r.unit; });
+      let debounce;
+      input.addEventListener('change', () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(async () => {
+          const ok = await updateSensor(sensor.entityId, input.value, sensor.attributes, card);
+          if (ok) card.querySelector('.card-state').textContent = 'Estado: ' + input.value + ' ' + r.unit;
+        }, 150);
+      });
+      row.appendChild(input);
+      row.appendChild(val);
+      wrap.appendChild(row);
+      return wrap;
+    }
+
+    function renderLight(sensor, currentState, currentBrightness, card) {
+      const wrap = document.createElement('div');
+      wrap.className = 'light-controls';
+      const isOn = currentState === 'on';
+      const btn = document.createElement('button');
+      btn.className = 'toggle-btn ' + (isOn ? 'on' : 'off');
+      btn.textContent = isOn ? 'ENCENDIDA' : 'APAGADA';
+      const bRow = document.createElement('div');
+      bRow.className = 'brightness-row';
+      bRow.style.display = isOn ? 'flex' : 'none';
+      const bLabel = document.createElement('span');
+      bLabel.textContent = 'Brillo:';
+      const bInput = document.createElement('input');
+      bInput.type = 'range'; bInput.min = 0; bInput.max = 255; bInput.step = 1;
+      bInput.value = currentBrightness ?? 255;
+      const bVal = document.createElement('span');
+      bVal.className = 'slider-value';
+      bVal.textContent = bInput.value;
+      bInput.addEventListener('input', () => { bVal.textContent = bInput.value; });
+      let debounce;
+      bInput.addEventListener('change', () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(async () => {
+          await updateSensor(sensor.entityId, 'on', { ...sensor.attributes, brightness: parseInt(bInput.value) }, card);
+        }, 150);
+      });
+      btn.addEventListener('click', async () => {
+        const newState = btn.classList.contains('on') ? 'off' : 'on';
+        const attrs = newState === 'on' ? { ...sensor.attributes, brightness: parseInt(bInput.value) } : sensor.attributes;
+        const ok = await updateSensor(sensor.entityId, newState, attrs, card);
+        if (ok) {
+          btn.className = 'toggle-btn ' + newState;
+          btn.textContent = newState === 'on' ? 'ENCENDIDA' : 'APAGADA';
+          bRow.style.display = newState === 'on' ? 'flex' : 'none';
+          card.querySelector('.card-state').textContent = 'Estado: ' + newState;
+        }
+      });
+      bRow.appendChild(bLabel); bRow.appendChild(bInput); bRow.appendChild(bVal);
+      wrap.appendChild(btn); wrap.appendChild(bRow);
+      return wrap;
+    }
+
+    async function loadSensors() {
+      try {
+        const res = await fetch('/api/sensors');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const sensors = await res.json();
+        container.innerHTML = '';
+
+        for (const sensor of sensors) {
+          const card = document.createElement('div');
+          card.className = 'card';
+
+          const cs = sensor.currentState;
+          const currentState = cs?.state || 'unknown';
+          const currentBrightness = cs?.attributes?.brightness ?? 255;
+          const lastSeen = cs?.lastSeen;
+
+          // Header with topic
+          const header = document.createElement('div');
+          header.className = 'card-header';
+          header.innerHTML = `
+            <span class="card-icon">${sensor.icon}</span>
+            <div>
+              <div class="card-name">${sensor.name}</div>
+              <div class="card-topic">${sensor.mqttTopic}</div>
+            </div>
+          `;
+          card.appendChild(header);
+
+          // State
+          const stateEl = document.createElement('div');
+          stateEl.className = 'card-state';
+          if (sensor.type === 'slider') {
+            const unit = sensor.range?.unit ?? '';
+            stateEl.textContent = 'Estado: ' + currentState + (currentState !== 'unknown' ? ' ' + unit : '');
+          } else {
+            stateEl.textContent = 'Estado: ' + currentState;
+          }
+          card.appendChild(stateEl);
+
+          // Last seen
+          const lsEl = document.createElement('div');
+          lsEl.className = 'card-lastseen ' + lastSeenClass(lastSeen);
+          lsEl.textContent = lastSeen ? 'Ultimo dato: ' + timeAgo(lastSeen) : 'Sin datos recibidos';
+          card.appendChild(lsEl);
+
+          // Controls
+          if (sensor.type === 'toggle') {
+            card.appendChild(renderToggle(sensor, currentState, card));
+          } else if (sensor.type === 'slider') {
+            const val = currentState !== 'unknown' ? parseFloat(currentState) : undefined;
+            card.appendChild(renderSlider(sensor, val, card));
+          } else if (sensor.type === 'light') {
+            card.appendChild(renderLight(sensor, currentState, currentBrightness, card));
+          }
+
+          container.appendChild(card);
+        }
+      } catch (e) {
+        container.innerHTML = '<div class="loading">Error conectando con el backend: ' + e.message + '</div>';
+      }
+    }
+
+    // Initial load
+    loadSensors();
+    updateMqttStatus();
+
+    // Refresh every 5 seconds
+    setInterval(loadSensors, 5000);
+    setInterval(updateMqttStatus, 3000);
+  </script>
+</body>
+</html>
