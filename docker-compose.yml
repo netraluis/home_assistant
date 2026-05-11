@@ -38,8 +38,9 @@ services:
       - "8080:8080"
     environment:
       - TZ=${TZ:-Europe/Andorra}
-    # devices:
-    #   - /dev/ttyACM0:/dev/ttyACM0 # Ajustar según el dongle en la RPi
+    devices:
+      # Ruta estable del Sonoff Dongle Plus MG24. Obtener con: ls -l /dev/serial/by-id/
+      - /dev/serial/by-id/usb-SONOFF_SONOFF_Dongle_Plus_MG24_bcf2b91e89a3ef11ab8f4fbd61ce3355-if00-port0:/dev/serial/by-id/usb-SONOFF_SONOFF_Dongle_Plus_MG24_bcf2b91e89a3ef11ab8f4fbd61ce3355-if00-port0
 
   # Node.js Backend
   app:
