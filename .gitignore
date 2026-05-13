@@ -8,6 +8,10 @@ yarn-error.log*
 # TypeScript
 dist/
 *.tsbuildinfo
+# Artefactos sueltos que tsc puede dejar en la raíz del workspace si rootDir difiere
+services/drizzle.config.js
+services/drizzle.config.d.ts
+services/drizzle.config.*.map
 
 # Environment variables
 .env
