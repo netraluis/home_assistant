@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'services/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/build-api.yml'
 permissions:
   contents: read
@@ -14,6 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
+        with:
+          image: tonistiigi/binfmt:qemu-v8.1.5
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -22,7 +27,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: ./services
+          # Contexto = raíz del repo (monorepo npm workspaces)
+          context: .
           file: ./services/Dockerfile
           platforms: linux/arm64
           push: true

@@ -1,18 +1,14 @@
-FROM node:20-alpine AS build
-WORKDIR /usr/src/app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build          # tsc → ./dist
-
+# Imagen del backend Node. Se construye desde la RAÍZ del repo (monorepo npm workspaces):
+#   docker build -f services/Dockerfile .
 FROM node:20-alpine
-WORKDIR /usr/src/app
+WORKDIR /app
+
+COPY . .
+RUN npm ci \
+ && npm run build --workspace services \
+ && npm prune --omit=dev
+
 ENV NODE_ENV=production
-COPY package*.json ./
-RUN npm ci --omit=dev      # solo dependencies (sin ts-node, sin drizzle-kit)
-COPY --from=build /usr/src/app/dist ./dist
-# ⚠️  si aplicas migraciones drizzle al arrancar (migrate() lee archivos .sql),
-#    descomenta y copia también la carpeta de migraciones:
-# COPY --from=build /usr/src/app/drizzle ./drizzle
+WORKDIR /app/services
 EXPOSE 3000
 CMD ["npm", "start"]

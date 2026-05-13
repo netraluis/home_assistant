@@ -45,8 +45,8 @@ services:
   # Node.js Backend
   app:
     build:
-      context: ./services
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/Dockerfile
     container_name: home_services
     restart: unless-stopped
     depends_on:
@@ -61,9 +61,6 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-}
     ports:
       - "3000:3000"
-    volumes:
-      - ./services:/usr/src/app
-      - /usr/src/app/node_modules
 
   # Frontend Next.js
   web:
@@ -71,8 +68,8 @@ services:
       context: .
       dockerfile: web/Dockerfile
       args:
-        # URL del backend tal y como la ve el NAVEGADOR (host), no la red interna de Docker.
-        NEXT_PUBLIC_API_URL: ${WEB_API_URL:-http://localhost:3000}
+        # BACKEND_URL: ruta interna a la red Docker (Next reescribe /api/* aquí en build time).
+        BACKEND_URL: ${BACKEND_URL:-http://app:3000}
     container_name: home_web
     restart: unless-stopped
     depends_on:
