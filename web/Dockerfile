@@ -1,4 +1,5 @@
-FROM node:20-alpine
+# Glibc (no musl) → @next/swc-linux-arm64-gnu, evita SIGILL bajo QEMU arm64.
+FROM node:20-bookworm-slim
 WORKDIR /app
 
 COPY . .
