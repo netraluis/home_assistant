@@ -43,7 +43,10 @@ export function Dashboard() {
           <h1 className="text-2xl font-semibold tracking-tight">Home Control</h1>
           <p className="text-sm text-zinc-500">Proyecto Andorra</p>
         </div>
-        <ConnBadge status={status} error={error} />
+        <div className="flex flex-col items-end gap-1">
+          <ConnBadge status={status} error={error} />
+          <DiscoveryBadge status={status} />
+        </div>
       </header>
 
       {error && (
@@ -55,6 +58,8 @@ export function Dashboard() {
 
       {!loaded ? (
         <p className="text-zinc-500">Cargando…</p>
+      ) : sensors.length === 0 ? (
+        <EmptyState status={status} />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sensors.map((s) => (
@@ -84,6 +89,46 @@ function ConnBadge({
       <span className="text-zinc-500">
         {error ? "API offline" : ok ? "MQTT conectado" : "MQTT desconectado"}
       </span>
+    </div>
+  );
+}
+
+function DiscoveryBadge({ status }: { status: StatusResponse | null }) {
+  if (!status) return null;
+  const { source, deviceCount } = status.discovery;
+  const labels: Record<typeof source, string> = {
+    zigbee2mqtt: `Z2M · ${deviceCount} dispositivo${deviceCount === 1 ? "" : "s"}`,
+    mock: `mock · ${deviceCount} sensor${deviceCount === 1 ? "" : "es"} estáticos`,
+    none: "esperando inventario Z2M…",
+  };
+  const colors: Record<typeof source, string> = {
+    zigbee2mqtt: "text-emerald-600 dark:text-emerald-400",
+    mock: "text-amber-600 dark:text-amber-400",
+    none: "text-zinc-400",
+  };
+  return <span className={`text-xs ${colors[source]}`}>{labels[source]}</span>;
+}
+
+function EmptyState({ status }: { status: StatusResponse | null }) {
+  const source = status?.discovery.source;
+  return (
+    <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-center dark:border-zinc-700 dark:bg-zinc-900/50">
+      <p className="mb-2 text-lg font-medium">No hay sensores</p>
+      {source === "zigbee2mqtt" ? (
+        <p className="text-sm text-zinc-500">
+          Zigbee2MQTT está conectado pero no hay dispositivos parejados.
+          <br />
+          Empareja uno desde el panel de Z2M (<a className="underline" href="http://localhost:8080" target="_blank" rel="noreferrer">localhost:8080</a>).
+        </p>
+      ) : source === "none" ? (
+        <p className="text-sm text-zinc-500">
+          Esperando inventario de Zigbee2MQTT (topic <code>zigbee2mqtt/bridge/devices</code>).
+          <br />
+          Verifica que Z2M está arrancado y conectado al broker MQTT.
+        </p>
+      ) : (
+        <p className="text-sm text-zinc-500">Lista vacía.</p>
+      )}
     </div>
   );
 }

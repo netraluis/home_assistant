@@ -5,9 +5,8 @@ import type { SensorWithState } from "@home/shared";
 import { api } from "@/lib/api";
 import { isStale, readState } from "@/lib/sensor";
 
-// Sensores que el usuario puede mandar (luces y enchufes). Los binarios
-// (puerta, presencia, fuga) son solo lectura.
-const CONTROLLABLE = new Set(["light", "toggle"]);
+// Sensores controlables (luces y enchufes con `state` escribible).
+// Backend marca `controllable` desde Z2M exposes; fallback heurístico para mock.
 const READONLY_TOGGLES = new Set([
   "binary_sensor.presencia_salon",
   "binary_sensor.fuga_agua_cocina",
@@ -25,7 +24,9 @@ export function SensorCard({
   const { on, raw, value } = readState(sensor);
   const stale = isStale(sensor);
   const canControl =
-    CONTROLLABLE.has(sensor.type) && !READONLY_TOGGLES.has(sensor.entityId);
+    sensor.controllable ??
+    ((sensor.type === "light" || sensor.type === "toggle") &&
+      !READONLY_TOGGLES.has(sensor.entityId));
 
   async function send(body: Parameters<typeof api.control>[1]) {
     setPending(true);
@@ -46,7 +47,16 @@ export function SensorCard({
           </span>
           <div>
             <p className="font-medium leading-tight">{sensor.name}</p>
-            <p className="text-xs text-zinc-400">{sensor.entityId}</p>
+            <p className="text-xs text-zinc-400">
+              {sensor.vendor || sensor.model
+                ? `${sensor.vendor ?? ""} ${sensor.model ?? ""}`.trim()
+                : sensor.entityId}
+            </p>
+            {sensor.ieeeAddress && (
+              <p className="text-[10px] font-mono text-zinc-300 dark:text-zinc-600">
+                {sensor.ieeeAddress}
+              </p>
+            )}
           </div>
         </div>
         <StateBadge on={on} raw={raw} stale={stale} type={sensor.type} value={value} unit={sensor.range?.unit} />

@@ -1,3 +1,5 @@
+export type SensorType = 'light' | 'toggle' | 'slider';
+
 export interface SensorRange {
   min: number;
   max: number;
@@ -8,11 +10,15 @@ export interface SensorRange {
 export interface SensorDef {
   entityId: string;
   name: string;
-  type: 'light' | 'toggle' | 'slider';
+  type: SensorType;
   icon: string;
   mqttTopic: string;
   attributes: Record<string, string>;
   range?: SensorRange;
+  // Metadatos opcionales (poblados por el descubrimiento Z2M en index.ts)
+  vendor?: string;
+  model?: string;
+  ieeeAddress?: string;
 }
 
 export const SENSORS: SensorDef[] = [

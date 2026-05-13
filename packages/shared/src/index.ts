@@ -17,6 +17,14 @@ export interface SensorDef {
   mqttTopic: string;
   attributes: Record<string, string>;
   range?: SensorRange;
+  // --- Metadatos opcionales rellenados por el descubrimiento de Z2M ---
+  vendor?: string;
+  model?: string;
+  ieeeAddress?: string;
+  /** true = descubierto por Zigbee2MQTT (real); false = sólo en config estática (mock). */
+  paired?: boolean;
+  /** true si el dispositivo expone alguna feature escribible (POST /api/sensor/:id). */
+  controllable?: boolean;
 }
 
 export interface SensorState {
@@ -43,6 +51,12 @@ export interface StatusResponse {
     host: string;
     lastMessage: string | null;
     messageCount: number;
+  };
+  discovery: {
+    /** 'zigbee2mqtt' = lista real de Z2M; 'mock' = fallback al SENSORS estático; 'none' = aún sin datos. */
+    source: 'zigbee2mqtt' | 'mock' | 'none';
+    deviceCount: number;
+    lastUpdate: string | null;
   };
   uptime: number;
 }
