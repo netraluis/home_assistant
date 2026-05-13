@@ -6,9 +6,9 @@ import type {
   StatusResponse,
 } from "@home/shared";
 
-// URL del backend Node. En dev apunta al puerto 3000; en prod se inyecta por env.
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+// El navegador hace fetch a rutas relativas; Next reescribe /api/* al backend
+// (red interna en prod, localhost en dev) → mismo origen, sin CORS.
+export const API_URL = "";
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
