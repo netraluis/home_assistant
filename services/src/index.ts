@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import mqtt from 'mqtt';
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -110,6 +111,11 @@ mqttClient.on('message', async (topic, message) => {
 
 // --- Express ---
 const app = express();
+// CORS_ORIGIN: lista separada por comas; vacío = permitir cualquier origen (dev).
+const corsOrigin = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
+  : true;
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 

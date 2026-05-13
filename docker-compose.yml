@@ -57,8 +57,25 @@ services:
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
       PORT: 3000
+      # Vacío = permitir cualquier origen (dev). En prod: "https://tu-dominio".
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
     ports:
       - "3000:3000"
     volumes:
       - ./services:/usr/src/app
       - /usr/src/app/node_modules
+
+  # Frontend Next.js
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        # URL del backend tal y como la ve el NAVEGADOR (host), no la red interna de Docker.
+        NEXT_PUBLIC_API_URL: ${WEB_API_URL:-http://localhost:3000}
+    container_name: home_web
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "3001:3001"

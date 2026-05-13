@@ -42,26 +42,32 @@ Sensores ← Zigbee → Dongle USB → Zigbee2MQTT → Mosquitto (MQTT) → Node
 - **Drizzle ORM**: Interacción con la base de datos
 - **Zigbee2MQTT**: Gestión de la red Zigbee
 - **Mosquitto**: Broker MQTT
+- **Next.js 16 + React 19 + Tailwind 4**: Frontend / PWA (`web/`)
 
 ## Estructura del Proyecto
 
+Monorepo con npm workspaces: `services/` (backend), `web/` (frontend), `packages/shared/` (tipos compartidos).
+
 ```
+├── package.json                # Raíz npm workspaces (npm run dev:api / dev:web)
 ├── docker-compose.yml          # Orquestación de contenedores
 ├── .env / .env.example         # Configuración
+├── .github/workflows/          # build-api.yml, build-web.yml (imágenes Docker arm64)
 ├── data/                       # Volúmenes persistentes (git-ignored)
-│   ├── postgres/
-│   ├── mosquitto/
-│   └── zigbee2mqtt/
-└── services/                   # Backend Node.js
-    ├── Dockerfile
-    ├── package.json
-    ├── drizzle.config.ts
-    └── src/
-        ├── index.ts            # Backend principal (Express + MQTT + DB)
-        ├── sensors.ts          # Definición de sensores
-        ├── mock_sensors.ts     # Simulación de sensores vía MQTT
-        └── db/
-            └── schema.ts       # Schema de PostgreSQL (Drizzle)
+│   ├── postgres/  mosquitto/  zigbee2mqtt/
+├── packages/shared/src/index.ts  # @home/shared: SensorDef, Scene, payloads API
+├── services/                   # Backend Node.js
+│   ├── Dockerfile  package.json  drizzle.config.ts
+│   └── src/
+│       ├── index.ts            # Backend principal (Express + MQTT + DB + CORS)
+│       ├── sensors.ts          # Definición de sensores
+│       ├── mock_sensors.ts     # Simulación de sensores vía MQTT
+│       └── db/schema.ts        # Schema de PostgreSQL (Drizzle)
+└── web/                        # Frontend Next.js
+    ├── Dockerfile  next.config.ts  package.json
+    ├── app/                    # layout.tsx, page.tsx
+    ├── components/             # Dashboard.tsx, SensorCard.tsx
+    └── lib/                    # api.ts (cliente fetch), sensor.ts (helpers de estado)
 ```
 
 ## Instrucciones de Inicio
@@ -81,20 +87,22 @@ docker-compose up -d
 
 Esto levanta: PostgreSQL, Mosquitto, Zigbee2MQTT y el backend Node.js.
 
-### 3. Inicializar la base de datos
+### 3. Instalar dependencias e inicializar la base de datos
 
 ```bash
-cd services
-npm install
-npm run db:push
+npm install                 # desde la raíz — instala todos los workspaces
+npm run -w services db:push
 ```
 
-### 4. Arrancar el backend (desarrollo local)
+### 4. Arrancar en desarrollo local
 
 ```bash
-npm start
-# Abre http://localhost:3000
+npm run dev:api             # backend en http://localhost:3000
+npm run dev:web             # frontend en http://localhost:3001
 ```
+
+El frontend (Next.js) llama al backend por HTTP; CORS está habilitado en el backend.
+Para apuntar a otro backend: `NEXT_PUBLIC_API_URL=http://otra-ip:3000 npm run dev:web`.
 
 ### 5. Simular sensores (sin hardware)
 
@@ -102,7 +110,15 @@ npm start
 npm run mock
 ```
 
-Publica datos falsos en MQTT cada 10 segundos. El backend los recibe, los guarda en PostgreSQL y los muestra en la UI.
+Publica datos falsos en MQTT cada 10 segundos. El backend los recibe, los guarda en PostgreSQL y aparecen en la UI (polling cada 2 s).
+
+### Todo junto con Docker
+
+```bash
+docker-compose up -d        # postgres, mosquitto, zigbee2mqtt, app (:3000), web (:3001)
+```
+
+La imagen `web` hornea la URL del backend en build time: ajusta `WEB_API_URL` en `.env` si el navegador no accede al backend por `http://localhost:3000`.
 
 ## Producción (Raspberry Pi)
 
