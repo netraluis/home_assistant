@@ -31,6 +31,8 @@ jobs:
           file: ./web/Dockerfile
           platforms: linux/arm64
           push: true
+          build-args: |
+            BACKEND_URL=http://home_assistant:3000
           tags: |
             ghcr.io/${{ github.repository_owner }}/home_assistant-web:latest
             ghcr.io/${{ github.repository_owner }}/home_assistant-web:${{ github.sha }}
