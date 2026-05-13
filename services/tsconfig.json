@@ -41,5 +41,9 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-  }
+  },
+  // Solo el código del backend. drizzle.config.ts vive en la raíz del workspace
+  // (lo lee drizzle-kit por separado, no debe ir al bundle).
+  "include": ["src/**/*"],
+  "exclude": ["dist", "node_modules"]
 }
