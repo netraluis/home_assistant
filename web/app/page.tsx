@@ -1,17 +1,12 @@
-// DEBUG: página mínima sin componentes cliente para descartar el túnel/CF.
-// Restaurar `<Dashboard />` cuando confirmemos que CF/Next funcionan.
-//
-// import { Dashboard } from "@/components/Dashboard";
+import { Dashboard } from "@/components/Dashboard";
 
+// Sin esto, Next prerenderiza el HTML y Cloudflare lo cachea con
+// `s-maxage=31536000` apuntando a chunks JS con hashes del build viejo.
+// Tras un redeploy los chunks cambian de hash → 404 → "page couldn't load".
+// Con force-dynamic el HTML se sirve fresh cada request (los chunks con hash
+// siguen cacheados por CF, son inmutables).
 export const dynamic = "force-dynamic";
 
 export default function Home() {
-  return (
-    <main style={{ padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <h1>Home Control — debug</h1>
-      <p>Página mínima sin JS de cliente, sin fetch.</p>
-      <p>Si ves esto desde home-assistant.netraluis.xyz, el túnel + Next + Cloudflare funcionan.</p>
-      <p>Server time: {new Date().toISOString()}</p>
-    </main>
-  );
+  return <Dashboard />;
 }
