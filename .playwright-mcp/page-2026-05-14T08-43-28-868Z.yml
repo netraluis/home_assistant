@@ -1,9 +1,0 @@
-- generic [active] [ref=e1]:
-  - main [ref=e2]:
-    - generic [ref=e3]:
-      - generic [ref=e4]:
-        - heading "Home Control" [level=1] [ref=e5]
-        - paragraph [ref=e6]: Proyecto Andorra
-      - generic [ref=e10]: MQTT desconectado
-    - paragraph [ref=e11]: Cargando…
-  - alert [ref=e12]

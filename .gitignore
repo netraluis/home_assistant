@@ -37,3 +37,4 @@ Desktop.ini
 
 # Drizzle Kit (optional: ignore only if you want to keep migrations out, but usually recommended to keep them)
 # services/drizzle/
+.playwright-mcp/
