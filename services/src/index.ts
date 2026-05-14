@@ -299,8 +299,14 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // MQTT + discovery status
+// `commit` y `builtAt` se inyectan como build-args en CI para verificar qué
+// SHA está corriendo en la Pi: `curl /api/status | jq .commit`.
+const COMMIT = process.env.COMMIT_SHA ?? 'dev';
+const BUILT_AT = process.env.BUILT_AT ?? new Date().toISOString();
 app.get('/api/status', (_req, res) => {
   res.json({
+    commit: COMMIT,
+    builtAt: BUILT_AT,
     mqtt: {
       connected: mqttConnected,
       host: `${MQTT_HOST}:${MQTT_PORT}`,

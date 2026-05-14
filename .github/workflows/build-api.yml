@@ -32,6 +32,9 @@ jobs:
           file: ./services/Dockerfile
           platforms: linux/arm64
           push: true
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            BUILT_AT=${{ github.event.head_commit.timestamp }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/home_assistant-api:latest
             ghcr.io/${{ github.repository_owner }}/home_assistant-api:${{ github.sha }}

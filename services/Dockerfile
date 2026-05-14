@@ -9,6 +9,11 @@ RUN npm ci \
  && npm prune --omit=dev
 
 ENV NODE_ENV=production
+# Sello de versión (visible en /api/status). Inyectados desde CI.
+ARG COMMIT_SHA=dev
+ARG BUILT_AT
+ENV COMMIT_SHA=$COMMIT_SHA
+ENV BUILT_AT=$BUILT_AT
 WORKDIR /app/services
 EXPOSE 3000
 CMD ["npm", "start"]

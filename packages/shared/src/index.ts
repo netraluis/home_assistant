@@ -46,6 +46,10 @@ export interface ControlPayload {
 
 /** Respuesta de GET /api/status */
 export interface StatusResponse {
+  /** SHA del commit con el que se construyó la imagen. 'dev' si no se inyectó. */
+  commit?: string;
+  /** Timestamp ISO del build. */
+  builtAt?: string;
   mqtt: {
     connected: boolean;
     host: string;
