@@ -94,7 +94,8 @@ function ConnBadge({
 }
 
 function DiscoveryBadge({ status }: { status: StatusResponse | null }) {
-  if (!status) return null;
+  // Defensa: backend antiguo sin campo `discovery` no debe crashear el dashboard.
+  if (!status?.discovery) return null;
   const { source, deviceCount } = status.discovery;
   const labels: Record<typeof source, string> = {
     zigbee2mqtt: `Z2M · ${deviceCount} dispositivo${deviceCount === 1 ? "" : "s"}`,
@@ -110,7 +111,7 @@ function DiscoveryBadge({ status }: { status: StatusResponse | null }) {
 }
 
 function EmptyState({ status }: { status: StatusResponse | null }) {
-  const source = status?.discovery.source;
+  const source = status?.discovery?.source;
   return (
     <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-center dark:border-zinc-700 dark:bg-zinc-900/50">
       <p className="mb-2 text-lg font-medium">No hay sensores</p>

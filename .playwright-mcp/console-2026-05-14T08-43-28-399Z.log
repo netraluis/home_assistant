@@ -1,0 +1,11 @@
+[     458ms] TypeError: Cannot destructure property 'source' of 'e.discovery' as it is undefined.
+    at c (https://home-assistant.netraluis.xyz/_next/static/chunks/0jyueim8vxhv8.js:1:4469)
+    at ay (https://home-assistant.netraluis.xyz/_next/static/chunks/07lhk_q6pmm3r.js:1:63845)
+    at oJ (https://home-assistant.netraluis.xyz/_next/static/chunks/07lhk_q6pmm3r.js:1:84102)
+    at iu (https://home-assistant.netraluis.xyz/_next/static/chunks/07lhk_q6pmm3r.js:1:95704)
+    at sd (https://home-assistant.netraluis.xyz/_next/static/chunks/07lhk_q6pmm3r.js:1:138944)
+    at https://home-assistant.netraluis.xyz/_next/static/chunks/07lhk_q6pmm3r.js:1:138789
+    at sf (https://home-assistant.netraluis.xyz/_next/static/chunks/07lhk_q6pmm3r.js:1:138797)
+    at se (https://home-assistant.netraluis.xyz/_next/static/chunks/07lhk_q6pmm3r.js:1:134718)
+    at s$ (https://home-assistant.netraluis.xyz/_next/static/chunks/07lhk_q6pmm3r.js:1:160495)
+    at MessagePort.O (https://home-assistant.netraluis.xyz/_next/static/chunks/07lhk_q6pmm3r.js:1:8660)
