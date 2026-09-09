@@ -1,5 +1,6 @@
 import type {
   ControlPayload,
+  DeviceNameResponse,
   HistoryRow,
   SensorState,
   SensorWithState,
@@ -27,6 +28,15 @@ export const api = {
   sensor: (entityId: string) => http<SensorState>(`/api/sensor/${entityId}`),
   status: () => http<StatusResponse>("/api/status"),
   history: (entityId: string) => http<HistoryRow[]>(`/api/history/${entityId}`),
+  // El nombre visible se guarda contra la dirección IEEE (inmutable), no contra
+  // el entityId: así renombrar no mueve el topic MQTT ni corta el histórico.
+  rename: (ieeeAddress: string, name: string) =>
+    http<DeviceNameResponse>(`/api/device/${ieeeAddress}/name`, {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    }),
+  resetName: (ieeeAddress: string) =>
+    http<DeviceNameResponse>(`/api/device/${ieeeAddress}/name`, { method: "DELETE" }),
   control: (entityId: string, body: ControlPayload) =>
     http<{ ok: boolean; topic: string; payload: Record<string, unknown> }>(
       `/api/sensor/${entityId}`,

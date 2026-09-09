@@ -128,6 +128,22 @@ Consulta: `GET /api/history/<entityId>?metric=power&limit=100`. Si las migracion
 fallaron, el backend arranca igual pero sin histórico — se ve en `db.ready` de
 `GET /api/status`.
 
+### Nombres de los dispositivos
+
+El nombre visible se edita desde el propio dashboard (icono ✏️ en la tarjeta) y se
+guarda en la tabla `device_meta`, indexado por la **dirección IEEE** del aparato,
+que es inmutable.
+
+Es a propósito que no se renombre en Zigbee2MQTT: allí el nombre visible es el
+`friendly_name`, que además de etiqueta es el topic MQTT (`zigbee2mqtt/<nombre>`) y
+el `sensor_id` con el que se guarda cada lectura. Cambiarlo movería el topic y
+dejaría el histórico anterior colgado del nombre viejo. Con `device_meta` el
+identificador técnico no se toca nunca y renombrar es gratis, tantas veces como
+quieras.
+
+    PUT    /api/device/<ieee>/name   {"name": "Enchufe salón"}
+    DELETE /api/device/<ieee>/name   # vuelve al friendly_name de Z2M
+
 ### Todo junto con Docker
 
 ```bash

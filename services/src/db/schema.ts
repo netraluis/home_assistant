@@ -16,3 +16,13 @@ export const sensorData = pgTable(
     index('sensor_data_sensor_id_timestamp_idx').on(t.sensorId, t.timestamp.desc()),
   ],
 );
+
+// Nombre visible de cada dispositivo, indexado por su dirección IEEE (inmutable,
+// grabada en el chip). Así renombrar es un UPDATE aquí y NO toca el friendly_name
+// de Z2M — que es el topic MQTT y el `sensor_id` del histórico. Sin esto, cada
+// renombrado movería el topic y desconectaría las lecturas ya guardadas.
+export const deviceMeta = pgTable('device_meta', {
+  ieeeAddress: text('ieee_address').primaryKey(),
+  displayName: text('display_name').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});

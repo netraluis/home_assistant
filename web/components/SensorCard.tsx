@@ -21,6 +21,7 @@ export function SensorCard({
   onChanged: () => void;
 }) {
   const [pending, setPending] = useState(false);
+  const [editing, setEditing] = useState(false);
   const { on, raw, value } = readState(sensor);
   const stale = isStale(sensor);
   const canControl =
@@ -46,7 +47,32 @@ export function SensorCard({
             {sensor.icon}
           </span>
           <div>
-            <p className="font-medium leading-tight">{sensor.name}</p>
+            {editing && sensor.ieeeAddress ? (
+              <NameEditor
+                ieeeAddress={sensor.ieeeAddress}
+                current={sensor.name}
+                canReset={sensor.name !== sensor.attributes.friendly_name}
+                onDone={() => {
+                  setEditing(false);
+                  onChanged();
+                }}
+                onCancel={() => setEditing(false)}
+              />
+            ) : (
+              <p className="group flex items-center gap-1 font-medium leading-tight">
+                {sensor.name}
+                {sensor.ieeeAddress && (
+                  <button
+                    onClick={() => setEditing(true)}
+                    aria-label={`Renombrar ${sensor.name}`}
+                    title="Renombrar"
+                    className="opacity-0 transition group-hover:opacity-100 focus:opacity-100"
+                  >
+                    ✏️
+                  </button>
+                )}
+              </p>
+            )}
             <p className="text-xs text-zinc-400">
               {sensor.vendor || sensor.model
                 ? `${sensor.vendor ?? ""} ${sensor.model ?? ""}`.trim()
@@ -112,6 +138,84 @@ export function SensorCard({
       {!canControl && (
         <p className="text-xs text-zinc-400">Solo lectura</p>
       )}
+    </div>
+  );
+}
+
+// El nombre vive en la BD del backend (tabla device_meta) indexado por IEEE.
+// Z2M no se entera: su friendly_name — y con él el topic MQTT y el sensor_id del
+// histórico — no se toca.
+function NameEditor({
+  ieeeAddress,
+  current,
+  canReset,
+  onDone,
+  onCancel,
+}: {
+  ieeeAddress: string;
+  current: string;
+  canReset: boolean;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(current);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  const save = () => {
+    const name = value.trim();
+    if (!name || name === current) {
+      onCancel();
+      return;
+    }
+    run(() => api.rename(ieeeAddress, name));
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1">
+        <input
+          autoFocus
+          value={value}
+          disabled={busy}
+          maxLength={64}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") onCancel();
+          }}
+          className="w-40 rounded border border-zinc-300 bg-white px-2 py-0.5 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+        />
+        <button onClick={save} disabled={busy} title="Guardar" aria-label="Guardar nombre">
+          ✅
+        </button>
+        <button onClick={onCancel} disabled={busy} title="Cancelar" aria-label="Cancelar">
+          ✖️
+        </button>
+        {canReset && (
+          <button
+            onClick={() => run(() => api.resetName(ieeeAddress))}
+            disabled={busy}
+            title="Volver al nombre de Zigbee2MQTT"
+            aria-label="Restablecer nombre"
+          >
+            ↩️
+          </button>
+        )}
+      </div>
+      {error && <span className="text-[10px] text-red-600">{error}</span>}
     </div>
   );
 }
