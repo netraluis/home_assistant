@@ -53,6 +53,7 @@ Services (Docker Compose):
 │       ├── sensors.ts          # Sensor definitions
 │       ├── mock_sensors.ts     # MQTT-based sensor simulator
 │       └── db/schema.ts        # sensorData table (Drizzle)
+│   └── drizzle/                # Migraciones SQL generadas (en git, se aplican al arrancar)
 └── web/                        # Next.js frontend
     ├── Dockerfile  next.config.ts  package.json
     ├── app/                    # layout.tsx, page.tsx (renders <Dashboard/>)
@@ -74,8 +75,9 @@ npm install                     # Install all workspaces
 npm run dev:api                 # Backend (ts-node, Express + MQTT) on :3000
 npm run dev:web                 # Next.js dev server on :3001
 npm run mock                    # Simulate sensors via MQTT
-npm run -w services db:push     # Apply schema to PostgreSQL
-npm run -w services db:generate # Generate migration files
+npm run -w services db:generate # Generate SQL migration from schema changes
+npm run -w services db:migrate  # Apply pending migrations manually
+npm run -w services db:push     # Push schema without migrations (dev only)
 
 # Frontend prod build
 npm run build:web
@@ -87,7 +89,7 @@ npm run build:web
 - `GET  /api/sensors`           — List all sensors with current state
 - `GET  /api/sensor/:entityId`  — Get current state of a sensor
 - `POST /api/sensor/:entityId`  — Control a device (publishes to MQTT)
-- `GET  /api/history/:entityId` — Query historical data from PostgreSQL
+- `GET  /api/history/:entityId` — Query historical data from PostgreSQL (`?metric=power`, `?limit=N` up to 1000)
 
 ## Database Schema
 
@@ -95,9 +97,27 @@ Single table `sensor_data`:
 - `id`: serial PK
 - `sensor_id`: text (device identifier)
 - `type`: text (light, toggle, slider)
+- `metric`: text, nullable (`power`, `energy`, `temperature`, `brightness`, ...)
 - `value`: double precision (nullable)
 - `unit`: text (nullable)
 - `timestamp`: auto-generated
+- index on `(sensor_id, timestamp DESC)`
+
+One row per numeric metric of each MQTT payload: a metering plug is `type: toggle`
+but yields `power`, `energy`, `voltage` and `current` rows. Units come from the
+Zigbee2MQTT `exposes`, falling back to a static map.
+
+To keep the table from growing at the MQTT publish rate (~10s per device), a
+reading is only stored when its value changed or when the last row for that
+`(sensor_id, metric)` is older than 15 minutes.
+
+### Migrations
+
+Versioned Drizzle migrations live in `services/drizzle/` (committed). The backend
+applies pending migrations on startup via `migrate()` from `drizzle-orm`, so a
+fresh deploy provisions its own schema — `drizzle-kit` is a devDependency and is
+**not** in the runtime image. If migrations fail the backend still boots and
+serves live state; only history is disabled (`db.ready: false` in `/api/status`).
 
 ## MQTT Topics
 
