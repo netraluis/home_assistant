@@ -5,6 +5,7 @@ import type { SensorWithState, StatusResponse } from "@home/shared";
 import { api } from "@/lib/api";
 import { SensorCard } from "@/components/SensorCard";
 import { PairingPanel } from "@/components/PairingPanel";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const POLL_MS = 2000;
 
@@ -44,9 +45,12 @@ export function Dashboard() {
           <h1 className="text-2xl font-semibold tracking-tight">Home Control</h1>
           <p className="text-sm text-zinc-500">Proyecto Andorra</p>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <ConnBadge status={status} error={error} />
-          <DiscoveryBadge status={status} />
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col items-end gap-1">
+            <ConnBadge status={status} error={error} />
+            <DiscoveryBadge status={status} />
+          </div>
+          <ThemeToggle />
         </div>
       </header>
 
