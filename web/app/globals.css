@@ -128,3 +128,12 @@
     @apply font-sans;
   }
 }
+/* Scrollbars y controles nativos del navegador acordes al tema. El orden
+   importa: `:root` y `.dark` tienen la misma especificidad, gana el último. */
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
