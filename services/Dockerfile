@@ -4,9 +4,17 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY . .
-RUN npm ci \
+# Instalamos SOLO los workspaces que necesita el backend. Un `npm ci` pelado
+# instalaría también el árbol de `web` (Next, Base UI, hugeicons...), que no
+# entra en esta imagen y que bajo la emulación QEMU arm64 del CI hace
+# segfault a npm (exit 139).
+RUN npm ci --include-workspace-root \
+      --workspace services \
+      --workspace packages/shared \
  && npm run build --workspace services \
- && npm prune --omit=dev
+ && npm prune --omit=dev --include-workspace-root \
+      --workspace services \
+      --workspace packages/shared
 
 ENV NODE_ENV=production
 # Sello de versión (visible en /api/status). Inyectados desde CI.
