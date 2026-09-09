@@ -3,7 +3,8 @@ import cors from 'cors';
 import mqtt from 'mqtt';
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { eq, desc } from 'drizzle-orm';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { and, eq, desc } from 'drizzle-orm';
 import * as dotenv from 'dotenv';
 import path from 'path';
 import { sensorData } from './db/schema';
@@ -72,6 +73,25 @@ const NUMERIC_SENSOR_NAMES = new Set([
   'temperature', 'humidity', 'pressure', 'illuminance',
   'power', 'energy', 'voltage', 'current',
 ]);
+
+// Métricas numéricas que guardamos en Postgres. Un enchufe con medición es de
+// tipo 'toggle' pero publica power/energy/voltage/current: sin esto su consumo
+// no se persistiría.
+const PERSISTED_METRICS = new Set([...NUMERIC_SENSOR_NAMES, 'brightness']);
+
+// Unidad de respaldo cuando Z2M no la declara en sus `exposes`.
+const DEFAULT_UNITS: Record<string, string> = {
+  temperature: '°C', humidity: '%', pressure: 'hPa', illuminance: 'lx',
+  power: 'W', energy: 'kWh', voltage: 'V', current: 'A',
+};
+
+function unitsFromExposes(exposes: Z2MExpose[] | undefined): Record<string, string> {
+  const units: Record<string, string> = {};
+  for (const e of flattenExposes(exposes)) {
+    if (e.name && e.unit) units[e.name] = e.unit;
+  }
+  return units;
+}
 
 function inferType(exposes: Z2MExpose[] | undefined): SensorType {
   const flat = flattenExposes(exposes);
@@ -162,6 +182,24 @@ function findSensor(entityId: string): SensorMeta | undefined {
 // --- PostgreSQL + Drizzle ---
 const pool = new Pool({ connectionString: DATABASE_URL });
 const db = drizzle(pool);
+// Se pone a true cuando las migraciones se aplican al arrancar. Si falla la BD
+// el backend sigue sirviendo estado en vivo, solo se queda sin histórico.
+let dbReady = false;
+
+// Z2M republica cada pocos segundos aunque no cambie nada (el enchufe, cada 10s).
+// Guardamos una fila solo si el valor cambió, o si hace más de PERSIST_MAX_GAP_MS
+// que no guardamos esa métrica — así una serie plana conserva puntos.
+const PERSIST_MAX_GAP_MS = 15 * 60 * 1000;
+const lastPersisted = new Map<string, { value: number; at: number }>();
+
+function shouldPersist(sensorId: string, metric: string, value: number): boolean {
+  const key = `${sensorId}:${metric}`;
+  const prev = lastPersisted.get(key);
+  const now = Date.now();
+  if (prev && prev.value === value && now - prev.at < PERSIST_MAX_GAP_MS) return false;
+  lastPersisted.set(key, { value, at: now });
+  return true;
+}
 
 // --- MQTT ---
 const mqttOptions: mqtt.IClientOptions = {};
@@ -231,60 +269,65 @@ mqttClient.on('message', async (topic, message) => {
   }
   if (!sensor) return;
 
+  // El try envuelve solo el parseo: así un fallo de BD no se confunde con un
+  // mensaje no-JSON (p. ej. availability: online/offline) y no se traga callado.
+  let payload: Record<string, any>;
   try {
-    const payload = JSON.parse(message.toString());
+    payload = JSON.parse(message.toString());
+  } catch {
+    return;
+  }
 
-    // Determine state and value based on sensor type
-    let state: string;
-    let value: number | null = null;
-    let unit: string | null = null;
+  // Estado que muestra la UI (una sola cadena por dispositivo)
+  let state: string;
+  if (sensor.type === 'light') {
+    state = payload.state?.toLowerCase() || 'off';
+  } else if (sensor.type === 'toggle') {
+    const raw = payload.state ?? payload.contact ?? payload.occupancy ?? payload.water_leak;
+    state = typeof raw === 'boolean' ? (raw ? 'on' : 'off') : String(raw).toLowerCase();
+  } else {
+    // slider: el primer numérico relevante del payload
+    const primary =
+      payload.temperature ??
+      payload.humidity ??
+      payload.power ??
+      payload.energy ??
+      payload.value ??
+      null;
+    state = primary !== null ? String(primary) : 'unknown';
+  }
 
-    if (sensor.type === 'light') {
-      state = payload.state?.toLowerCase() || 'off';
-      value = payload.brightness ?? null;
-      unit = 'brightness';
-    } else if (sensor.type === 'toggle') {
-      const raw = payload.state ?? payload.contact ?? payload.occupancy ?? payload.water_leak;
-      if (typeof raw === 'boolean') {
-        state = raw ? 'on' : 'off';
-      } else {
-        state = String(raw).toLowerCase();
-      }
-    } else {
-      // slider: tomar el primer numérico relevante del payload
-      value =
-        payload.temperature ??
-        payload.humidity ??
-        payload.power ??
-        payload.energy ??
-        payload.value ??
-        null;
-      unit = sensor.range?.unit ?? null;
-      state = value !== null ? String(value) : 'unknown';
-    }
+  // Update MQTT stats
+  lastMqttMessage = new Date();
+  mqttMessageCount++;
 
-    // Update MQTT stats
-    lastMqttMessage = new Date();
-    mqttMessageCount++;
+  // Update in-memory state
+  sensorStates.set(sensor.entityId, {
+    state,
+    attributes: { ...sensor.attributes, ...payload },
+    lastSeen: new Date(),
+  });
 
-    // Update in-memory state
-    sensorStates.set(sensor.entityId, {
-      state,
-      attributes: { ...sensor.attributes, ...payload },
-      lastSeen: new Date(),
-    });
-
-    // Save to PostgreSQL
-    if (DATABASE_URL) {
-      await db.insert(sensorData).values({
+  // Persistencia: una fila por métrica numérica del payload.
+  if (DATABASE_URL && dbReady) {
+    const units = unitsFromExposes(z2m?.definition?.exposes);
+    const rows = Object.entries(payload)
+      .filter(([name, raw]) => typeof raw === 'number' && PERSISTED_METRICS.has(name))
+      .filter(([name, raw]) => shouldPersist(sensor.entityId, name, raw as number))
+      .map(([name, raw]) => ({
         sensorId: sensor.entityId,
         type: sensor.type,
-        value,
-        unit,
-      });
+        metric: name,
+        value: raw as number,
+        unit: units[name] ?? DEFAULT_UNITS[name] ?? null,
+      }));
+    if (rows.length > 0) {
+      try {
+        await db.insert(sensorData).values(rows);
+      } catch (e) {
+        console.error('No se pudo guardar en Postgres:', (e as Error).message);
+      }
     }
-  } catch {
-    // Ignore non-JSON messages (e.g. availability: online/offline)
   }
 });
 
@@ -313,6 +356,7 @@ app.get('/api/status', (_req, res) => {
       lastMessage: lastMqttMessage,
       messageCount: mqttMessageCount,
     },
+    db: { ready: dbReady },
     discovery: {
       source: discoverySource,
       deviceCount:
@@ -385,22 +429,55 @@ app.post('/api/sensor/:entityId', (req, res) => {
   res.json({ ok: true, topic: setTopic, payload });
 });
 
-// Get history for a sensor
+// Get history for a sensor. ?metric=power acota a una métrica; ?limit=N (máx 1000).
 app.get('/api/history/:entityId', async (req, res) => {
+  if (!dbReady) {
+    res.status(503).json({ error: 'Persistencia no disponible' });
+    return;
+  }
+  const limit = Math.min(Number(req.query.limit) || 100, 1000);
+  const metric = typeof req.query.metric === 'string' ? req.query.metric : null;
+  const where = metric
+    ? and(eq(sensorData.sensorId, req.params.entityId), eq(sensorData.metric, metric))
+    : eq(sensorData.sensorId, req.params.entityId);
   try {
     const rows = await db
       .select()
       .from(sensorData)
-      .where(eq(sensorData.sensorId, req.params.entityId))
+      .where(where)
       .orderBy(desc(sensorData.timestamp))
-      .limit(100);
+      .limit(limit);
     res.json(rows);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    console.error('history:', error.message);
+    res.status(500).json({ error: 'Error consultando el histórico' });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend: http://localhost:${PORT}`);
-  console.log(`MQTT: ${MQTT_HOST}:${MQTT_PORT}`);
+// --- Arranque ---
+// Las migraciones se aplican al iniciar el contenedor. La imagen NO lleva
+// drizzle-kit (es devDependency y el Dockerfile hace `npm prune --omit=dev`),
+// pero `migrate()` vive en drizzle-orm, que sí es dependencia de producción.
+const MIGRATIONS_FOLDER = path.join(__dirname, '..', 'drizzle');
+
+async function runMigrations(): Promise<void> {
+  if (!DATABASE_URL) {
+    console.warn('DATABASE_URL no definida → arrancando sin persistencia');
+    return;
+  }
+  try {
+    await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+    dbReady = true;
+    console.log('Migraciones aplicadas');
+  } catch (e) {
+    console.error('Fallo aplicando migraciones → sin persistencia:', (e as Error).message);
+  }
+}
+
+runMigrations().finally(() => {
+  app.listen(PORT, () => {
+    console.log(`Backend: http://localhost:${PORT}`);
+    console.log(`MQTT: ${MQTT_HOST}:${MQTT_PORT}`);
+    console.log(`Persistencia: ${dbReady ? 'activa' : 'desactivada'}`);
+  });
 });

@@ -20,14 +20,26 @@ npm install
 ```
 
 ### 2. Gestión de Base de Datos (Drizzle)
-Antes de arrancar la lógica, asegura que la BD está sincronizada.
-```bash
-# Sincronizar esquema local con la BD remota/Docker
-npm run db:push
+El esquema se versiona con migraciones en `drizzle/`, que se aplican **solas al
+arrancar** el backend (`migrate()` de drizzle-orm en `src/index.ts`). En un
+despliegue normal no hay que ejecutar nada a mano.
 
-# Generar archivos de migración SQL (si es necesario)
+Al cambiar `src/db/schema.ts`:
+```bash
+# 1. Generar el SQL de la migración (offline, no necesita BD)
 npm run db:generate
+
+# 2. Commitear drizzle/ junto al cambio de esquema.
+#    El siguiente arranque del contenedor la aplica.
+
+# Aplicar migraciones pendientes a mano contra una BD concreta:
+DATABASE_URL=postgres://... npm run db:migrate
+
+# Solo para desarrollo rápido: sincroniza el esquema sin generar migración
+npm run db:push
 ```
+*Nota: `drizzle-kit` es devDependency y el `Dockerfile` hace `npm prune --omit=dev`,
+así que no existe dentro de la imagen; el runtime solo usa `migrate()`.*
 
 ### 3. Ejecución de Lógica
 **Modo Producción (dentro de Docker):**
