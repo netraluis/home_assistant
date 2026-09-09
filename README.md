@@ -63,6 +63,7 @@ Monorepo con npm workspaces: `services/` (backend), `web/` (frontend), `packages
 │       ├── sensors.ts          # Definición de sensores
 │       ├── mock_sensors.ts     # Simulación de sensores vía MQTT
 │       └── db/schema.ts        # Schema de PostgreSQL (Drizzle)
+│   └── drizzle/                # Migraciones SQL versionadas (se aplican al arrancar)
 └── web/                        # Frontend Next.js
     ├── Dockerfile  next.config.ts  package.json
     ├── app/                    # layout.tsx, page.tsx
@@ -87,12 +88,15 @@ docker-compose up -d
 
 Esto levanta: PostgreSQL, Mosquitto, Zigbee2MQTT y el backend Node.js.
 
-### 3. Instalar dependencias e inicializar la base de datos
+### 3. Instalar dependencias
 
 ```bash
 npm install                 # desde la raíz — instala todos los workspaces
-npm run -w services db:push
 ```
+
+No hay que inicializar la base de datos a mano: el backend aplica las migraciones
+de `services/drizzle/` al arrancar. Si cambias `services/src/db/schema.ts`, genera
+la migración con `npm run -w services db:generate` y commitéala junto al cambio.
 
 ### 4. Arrancar en desarrollo local
 
@@ -111,6 +115,18 @@ npm run mock
 ```
 
 Publica datos falsos en MQTT cada 10 segundos. El backend los recibe, los guarda en PostgreSQL y aparecen en la UI (polling cada 2 s).
+
+### Persistencia de lecturas
+
+Cada payload MQTT genera una fila por métrica numérica (`power`, `energy`,
+`temperature`, `brightness`…) en la tabla `sensor_data`, con la unidad que declara
+Zigbee2MQTT en sus `exposes`. Para no crecer al ritmo de publicación de Z2M (unos
+10 s por dispositivo) solo se guarda una lectura si su valor cambió o si la última
+fila de esa métrica tiene más de 15 minutos.
+
+Consulta: `GET /api/history/<entityId>?metric=power&limit=100`. Si las migraciones
+fallaron, el backend arranca igual pero sin histórico — se ve en `db.ready` de
+`GET /api/status`.
 
 ### Todo junto con Docker
 
