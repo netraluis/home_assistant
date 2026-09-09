@@ -90,10 +90,12 @@ npm run build:web
 - `GET  /api/sensor/:entityId`  — Get current state of a sensor
 - `POST /api/sensor/:entityId`  — Control a device (publishes to MQTT)
 - `GET  /api/history/:entityId` — Query historical data from PostgreSQL (`?metric=power`, `?limit=N` up to 1000)
+- `PUT    /api/device/:ieeeAddress/name` — Set the display name (`{ "name": "Enchufe salón" }`)
+- `DELETE /api/device/:ieeeAddress/name` — Clear it, falling back to the Zigbee2MQTT `friendly_name`
 
 ## Database Schema
 
-Single table `sensor_data`:
+### `sensor_data`
 - `id`: serial PK
 - `sensor_id`: text (device identifier)
 - `type`: text (light, toggle, slider)
@@ -106,6 +108,20 @@ Single table `sensor_data`:
 One row per numeric metric of each MQTT payload: a metering plug is `type: toggle`
 but yields `power`, `energy`, `voltage` and `current` rows. Units come from the
 Zigbee2MQTT `exposes`, falling back to a static map.
+
+### `device_meta`
+
+- `ieee_address`: text PK — the device's IEEE address, burned into the chip
+- `display_name`: text
+- `updated_at`: auto-generated
+
+Display names live here, **not** in Zigbee2MQTT. Renaming through Z2M would change
+the `friendly_name`, which is both the MQTT topic and the `sensor_id` written to
+`sensor_data` — every existing reading would be orphaned under the old name. Keying
+on the IEEE address instead makes a rename a single `UPDATE` with no side effects.
+`entityId` stays the `friendly_name`; only `name` is overridden, from an in-memory
+cache refreshed on every write (`getAllSensors()` is synchronous and runs per
+request, so it cannot hit the DB).
 
 To keep the table from growing at the MQTT publish rate (~10s per device), a
 reading is only stored when its value changed or when the last row for that

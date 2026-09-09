@@ -65,6 +65,18 @@ export interface StatusResponse {
   uptime: number;
 }
 
+/** Body de PUT /api/device/:ieeeAddress/name */
+export interface RenameDevicePayload {
+  name: string;
+}
+
+/** Respuesta de PUT/DELETE /api/device/:ieeeAddress/name */
+export interface DeviceNameResponse {
+  ieeeAddress: string;
+  /** Nombre visible resultante. Tras un DELETE, el friendly_name de Z2M. */
+  name: string | null;
+}
+
 /** Fila de GET /api/history/:entityId */
 export interface HistoryRow {
   id: number;

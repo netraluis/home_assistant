@@ -7,7 +7,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { and, eq, desc } from 'drizzle-orm';
 import * as dotenv from 'dotenv';
 import path from 'path';
-import { sensorData } from './db/schema';
+import { sensorData, deviceMeta } from './db/schema';
 import { SENSORS } from './sensors';
 import type { SensorDef, SensorRange, SensorType } from './sensors';
 
@@ -135,6 +135,29 @@ function rangeFor(type: SensorType, exposes: Z2MExpose[] | undefined): SensorRan
   return undefined;
 }
 
+// --- Nombres de usuario (tabla device_meta, clave = dirección IEEE) ---
+// Se cachean en memoria porque getAllSensors() es síncrono y se llama en cada
+// request. La BD es la fuente de verdad; el Map se refresca en cada escritura.
+const deviceNames = new Map<string, string>();
+
+export const DISPLAY_NAME_MAX = 64;
+
+/** Devuelve el nombre saneado, o null si no es válido. */
+function normalizeDisplayName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  // eslint-disable-next-line no-control-regex
+  const name = raw.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  if (!name || name.length > DISPLAY_NAME_MAX) return null;
+  return name;
+}
+
+async function loadDeviceNames(): Promise<void> {
+  const rows = await db.select().from(deviceMeta);
+  deviceNames.clear();
+  for (const r of rows) deviceNames.set(r.ieeeAddress, r.displayName);
+  console.log(`Nombres personalizados: ${deviceNames.size}`);
+}
+
 // --- Vista unificada: union de Z2M descubierto + overrides estáticos (SENSORS) ---
 type SensorMeta = SensorDef & { paired: boolean; controllable: boolean };
 
@@ -153,8 +176,10 @@ function buildMetaFromZ2M(z2m: Z2MDevice): SensorMeta {
     ...(range ? { range } : {}),
   };
   // exactOptionalPropertyTypes: true → no podemos asignar `undefined` a opcionales.
+  const displayName = deviceNames.get(z2m.ieee_address);
   return {
     ...base,
+    ...(displayName ? { name: displayName } : {}),
     ...(z2m.definition?.vendor ? { vendor: z2m.definition.vendor } : {}),
     ...(z2m.definition?.model ? { model: z2m.definition.model } : {}),
     ieeeAddress: z2m.ieee_address,
@@ -454,6 +479,61 @@ app.get('/api/history/:entityId', async (req, res) => {
   }
 });
 
+// --- Nombre visible de un dispositivo ---
+// Se indexa por dirección IEEE, no por entityId: el entityId es el friendly_name
+// de Z2M (topic MQTT + sensor_id del histórico) y debe quedarse quieto.
+function findByIeee(ieeeAddress: string) {
+  return getAllSensors().find(s => s.ieeeAddress === ieeeAddress);
+}
+
+app.put('/api/device/:ieeeAddress/name', async (req, res) => {
+  if (!dbReady) {
+    res.status(503).json({ error: 'Persistencia no disponible' });
+    return;
+  }
+  const { ieeeAddress } = req.params;
+  if (!findByIeee(ieeeAddress)) {
+    res.status(404).json({ error: 'Dispositivo no encontrado' });
+    return;
+  }
+  const displayName = normalizeDisplayName(req.body?.name);
+  if (!displayName) {
+    res.status(400).json({ error: `El nombre debe tener entre 1 y ${DISPLAY_NAME_MAX} caracteres` });
+    return;
+  }
+  try {
+    await db
+      .insert(deviceMeta)
+      .values({ ieeeAddress, displayName })
+      .onConflictDoUpdate({
+        target: deviceMeta.ieeeAddress,
+        set: { displayName, updatedAt: new Date() },
+      });
+    deviceNames.set(ieeeAddress, displayName);
+    res.json({ ieeeAddress, name: displayName });
+  } catch (error: any) {
+    console.error('rename:', error.message);
+    res.status(500).json({ error: 'Error guardando el nombre' });
+  }
+});
+
+// Quita el nombre de usuario → vuelve a mostrarse el friendly_name de Z2M.
+app.delete('/api/device/:ieeeAddress/name', async (req, res) => {
+  if (!dbReady) {
+    res.status(503).json({ error: 'Persistencia no disponible' });
+    return;
+  }
+  const { ieeeAddress } = req.params;
+  try {
+    await db.delete(deviceMeta).where(eq(deviceMeta.ieeeAddress, ieeeAddress));
+    deviceNames.delete(ieeeAddress);
+    res.json({ ieeeAddress, name: findByIeee(ieeeAddress)?.name ?? null });
+  } catch (error: any) {
+    console.error('rename (delete):', error.message);
+    res.status(500).json({ error: 'Error borrando el nombre' });
+  }
+});
+
 // --- Arranque ---
 // Las migraciones se aplican al iniciar el contenedor. La imagen NO lleva
 // drizzle-kit (es devDependency y el Dockerfile hace `npm prune --omit=dev`),
@@ -469,6 +549,7 @@ async function runMigrations(): Promise<void> {
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
     dbReady = true;
     console.log('Migraciones aplicadas');
+    await loadDeviceNames();
   } catch (e) {
     console.error('Fallo aplicando migraciones → sin persistencia:', (e as Error).message);
   }
