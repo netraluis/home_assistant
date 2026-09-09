@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { SensorWithState, StatusResponse } from "@home/shared";
 import { api } from "@/lib/api";
 import { SensorCard } from "@/components/SensorCard";
+import { PairingPanel } from "@/components/PairingPanel";
 
 const POLL_MS = 2000;
 
@@ -54,6 +55,10 @@ export function Dashboard() {
           No se puede contactar el backend ({error}). ¿Está corriendo en{" "}
           <code>localhost:3000</code>?
         </div>
+      )}
+
+      {loaded && status?.discovery?.source === "zigbee2mqtt" && (
+        <PairingPanel onDeviceAdded={refresh} />
       )}
 
       {!loaded ? (
@@ -117,9 +122,9 @@ function EmptyState({ status }: { status: StatusResponse | null }) {
       <p className="mb-2 text-lg font-medium">No hay sensores</p>
       {source === "zigbee2mqtt" ? (
         <p className="text-sm text-zinc-500">
-          Zigbee2MQTT está conectado pero no hay dispositivos parejados.
+          Zigbee2MQTT está conectado pero no hay dispositivos emparejados.
           <br />
-          Empareja uno desde el panel de Z2M (<a className="underline" href="http://localhost:8080" target="_blank" rel="noreferrer">localhost:8080</a>).
+          Usa <strong>Añadir dispositivo</strong> aquí arriba y resetea el aparato para que se una.
         </p>
       ) : source === "none" ? (
         <p className="text-sm text-zinc-500">

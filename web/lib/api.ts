@@ -2,6 +2,7 @@ import type {
   ControlPayload,
   DeviceNameResponse,
   HistoryRow,
+  PairingStatus,
   SensorState,
   SensorWithState,
   StatusResponse,
@@ -28,6 +29,12 @@ export const api = {
   sensor: (entityId: string) => http<SensorState>(`/api/sensor/${entityId}`),
   status: () => http<StatusResponse>("/api/status"),
   history: (entityId: string) => http<HistoryRow[]>(`/api/history/${entityId}`),
+  pairing: () => http<PairingStatus>("/api/pairing"),
+  setPairing: (enable: boolean) =>
+    http<{ requested: boolean; windowSeconds: number }>("/api/pairing", {
+      method: "POST",
+      body: JSON.stringify({ enable }),
+    }),
   // El nombre visible se guarda contra la dirección IEEE (inmutable), no contra
   // el entityId: así renombrar no mueve el topic MQTT ni corta el histórico.
   rename: (ieeeAddress: string, name: string) =>

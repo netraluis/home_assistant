@@ -90,6 +90,8 @@ npm run build:web
 - `GET  /api/sensor/:entityId`  — Get current state of a sensor
 - `POST /api/sensor/:entityId`  — Control a device (publishes to MQTT)
 - `GET  /api/history/:entityId` — Query historical data from PostgreSQL (`?metric=power`, `?limit=N` up to 1000)
+- `GET  /api/pairing`           — Permit-join state, seconds left and recent join events
+- `POST /api/pairing`           — Open/close the pairing window (`{ "enable": true }`)
 - `PUT    /api/device/:ieeeAddress/name` — Set the display name (`{ "name": "Enchufe salón" }`)
 - `DELETE /api/device/:ieeeAddress/name` — Clear it, falling back to the Zigbee2MQTT `friendly_name`
 

@@ -226,6 +226,36 @@ function shouldPersist(sensorId: string, metric: string, value: number): boolean
   return true;
 }
 
+// --- Emparejamiento (permit join) ---
+// Abrir la red Zigbee deja entrar a CUALQUIER dispositivo al alcance mientras la
+// ventana esté abierta, así que siempre con un plazo corto y cierre automático.
+// Z2M no acepta "indefinido" desde aquí: mandamos siempre un `time` explícito.
+const PAIRING_WINDOW_S = 120;
+const PAIRING_EVENTS_MAX = 20;
+
+interface PairingEvent {
+  type: 'device_joined' | 'device_interview' | 'device_announce' | 'device_leave';
+  ieeeAddress: string;
+  friendlyName: string;
+  /** Solo en device_interview: 'started' | 'successful' | 'failed'. */
+  status?: string;
+  vendor?: string;
+  model?: string;
+  supported?: boolean;
+  at: string;
+}
+
+let permitJoin = false;
+/** Timestamp (ms) en que Z2M cerrará la ventana. null si está cerrada. */
+let permitJoinEnd: number | null = null;
+let pairingError: string | null = null;
+const pairingEvents: PairingEvent[] = [];
+
+function pairingSecondsLeft(): number {
+  if (!permitJoin || !permitJoinEnd) return 0;
+  return Math.max(0, Math.round((permitJoinEnd - Date.now()) / 1000));
+}
+
 // --- MQTT ---
 const mqttOptions: mqtt.IClientOptions = {};
 if (MQTT_USER) mqttOptions.username = MQTT_USER;
@@ -270,7 +300,53 @@ mqttClient.on('message', async (topic, message) => {
     }
     return;
   }
-  // Resto de mensajes de bridge/* (info, state, logging, ...) los ignoramos.
+  // 2) Estado del bridge: de aquí sale si la red está abierta a emparejar.
+  if (topic === 'zigbee2mqtt/bridge/info') {
+    try {
+      const info = JSON.parse(message.toString());
+      permitJoin = info.permit_join === true;
+      // `permit_join_end` solo viene mientras la ventana está abierta.
+      permitJoinEnd = permitJoin && typeof info.permit_join_end === 'number' ? info.permit_join_end : null;
+    } catch {
+      // info malformado: no tocamos el estado anterior.
+    }
+    return;
+  }
+  // 3) Eventos de emparejamiento: joined → interview (started/successful/failed) → announce.
+  if (topic === 'zigbee2mqtt/bridge/event') {
+    try {
+      const ev = JSON.parse(message.toString());
+      const d = ev?.data ?? {};
+      if (!d.ieee_address) return;
+      pairingEvents.unshift({
+        type: ev.type,
+        ieeeAddress: d.ieee_address,
+        friendlyName: d.friendly_name ?? d.ieee_address,
+        ...(d.status ? { status: d.status } : {}),
+        ...(d.definition?.vendor ? { vendor: d.definition.vendor } : {}),
+        ...(d.definition?.model ? { model: d.definition.model } : {}),
+        ...(typeof d.supported === 'boolean' ? { supported: d.supported } : {}),
+        at: new Date().toISOString(),
+      });
+      pairingEvents.length = Math.min(pairingEvents.length, PAIRING_EVENTS_MAX);
+      console.log(`Z2M event: ${ev.type} ${d.ieee_address}${d.status ? ` (${d.status})` : ''}`);
+    } catch {
+      // evento malformado: lo ignoramos.
+    }
+    return;
+  }
+  // 4) Respuesta a nuestra petición de permit_join: solo nos interesa el error.
+  if (topic === 'zigbee2mqtt/bridge/response/permit_join') {
+    try {
+      const r = JSON.parse(message.toString());
+      pairingError = r?.status === 'error' ? (r.error ?? 'error desconocido') : null;
+      if (pairingError) console.warn('permit_join rechazado:', pairingError);
+    } catch {
+      // ignorar
+    }
+    return;
+  }
+  // Resto de mensajes de bridge/* (state, logging, ...) los ignoramos.
   if (topic.startsWith('zigbee2mqtt/bridge')) return;
 
   // 2) Mensaje de estado de un device. Resolvemos meta desde Z2M descubierto
@@ -477,6 +553,50 @@ app.get('/api/history/:entityId', async (req, res) => {
     console.error('history:', error.message);
     res.status(500).json({ error: 'Error consultando el histórico' });
   }
+});
+
+// --- Emparejamiento ---
+app.get('/api/pairing', (_req, res) => {
+  res.json({
+    permitJoin,
+    secondsLeft: pairingSecondsLeft(),
+    windowSeconds: PAIRING_WINDOW_S,
+    error: pairingError,
+    events: pairingEvents,
+  });
+});
+
+// Abre (`{"enable": true}`) o cierra (`{"enable": false}`) la ventana de
+// emparejamiento. Nunca se abre "para siempre": Z2M la cierra sola a los
+// PAIRING_WINDOW_S segundos aunque nadie pulse nada.
+app.post('/api/pairing', (req, res) => {
+  if (!mqttConnected) {
+    res.status(503).json({ error: 'Sin conexión MQTT' });
+    return;
+  }
+  if (discoverySource !== 'zigbee2mqtt') {
+    res.status(503).json({ error: 'Zigbee2MQTT no está respondiendo' });
+    return;
+  }
+  if (typeof req.body?.enable !== 'boolean') {
+    res.status(400).json({ error: 'Se espera { "enable": true | false }' });
+    return;
+  }
+  const enable: boolean = req.body.enable;
+  const time = enable ? PAIRING_WINDOW_S : 0;
+  if (enable) {
+    // Cada sesión de emparejamiento empieza con la lista limpia: lo que se ve en
+    // el dashboard es lo que está pasando ahora, no el histórico.
+    pairingEvents.length = 0;
+  }
+  pairingError = null;
+  mqttClient.publish('zigbee2mqtt/bridge/request/permit_join', JSON.stringify({ time }), err => {
+    if (err) console.error('permit_join publish:', err.message);
+  });
+  console.log(`permit_join: ${enable ? `abierto ${time}s` : 'cerrado'}`);
+  // El estado real llega por `bridge/info` en cuanto Z2M lo aplique; el cliente
+  // lo verá en el siguiente GET /api/pairing.
+  res.json({ requested: enable, windowSeconds: PAIRING_WINDOW_S });
 });
 
 // --- Nombre visible de un dispositivo ---
