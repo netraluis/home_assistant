@@ -2,10 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SensorWithState, StatusResponse } from "@home/shared";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Alert02Icon, InboxIcon, RouterIcon } from "@hugeicons/core-free-icons";
 import { api } from "@/lib/api";
 import { SensorCard } from "@/components/SensorCard";
 import { PairingPanel } from "@/components/PairingPanel";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const POLL_MS = 2000;
 
@@ -42,8 +54,10 @@ export function Dashboard() {
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
       <header className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Home Control</h1>
-          <p className="text-sm text-zinc-500">Proyecto Andorra</p>
+          <h1 className="font-heading text-2xl font-semibold tracking-wider uppercase">
+            Home Control
+          </h1>
+          <p className="text-sm text-muted-foreground">Proyecto Andorra</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-end gap-1">
@@ -55,10 +69,13 @@ export function Dashboard() {
       </header>
 
       {error && (
-        <div className="mb-6 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          No se puede contactar el backend ({error}). ¿Está corriendo en{" "}
-          <code>localhost:3000</code>?
-        </div>
+        <Alert variant="destructive" className="mb-6">
+          <HugeiconsIcon icon={Alert02Icon} />
+          <AlertTitle>No se puede contactar el backend</AlertTitle>
+          <AlertDescription>
+            {error}. ¿Está corriendo en <code>localhost:3000</code>?
+          </AlertDescription>
+        </Alert>
       )}
 
       {loaded && status?.discovery?.source === "zigbee2mqtt" && (
@@ -66,7 +83,11 @@ export function Dashboard() {
       )}
 
       {!loaded ? (
-        <p className="text-zinc-500">Cargando…</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-44 w-full" />
+          ))}
+        </div>
       ) : sensors.length === 0 ? (
         <EmptyState status={status} />
       ) : (
@@ -89,16 +110,14 @@ function ConnBadge({
 }) {
   const ok = !error && status?.mqtt.connected;
   return (
-    <div className="flex items-center gap-2 text-sm">
+    <Badge variant={error ? "destructive" : ok ? "default" : "secondary"}>
       <span
-        className={`inline-block h-2.5 w-2.5 rounded-full ${
-          ok ? "bg-emerald-500" : error ? "bg-red-500" : "bg-amber-500"
+        className={`inline-block h-2 w-2 shrink-0 ${
+          ok ? "bg-primary" : error ? "bg-destructive" : "bg-muted-foreground"
         }`}
       />
-      <span className="text-zinc-500">
-        {error ? "API offline" : ok ? "MQTT conectado" : "MQTT desconectado"}
-      </span>
-    </div>
+      {error ? "API offline" : ok ? "MQTT conectado" : "MQTT desconectado"}
+    </Badge>
   );
 }
 
@@ -111,34 +130,41 @@ function DiscoveryBadge({ status }: { status: StatusResponse | null }) {
     mock: `mock · ${deviceCount} sensor${deviceCount === 1 ? "" : "es"} estáticos`,
     none: "esperando inventario Z2M…",
   };
-  const colors: Record<typeof source, string> = {
-    zigbee2mqtt: "text-emerald-600 dark:text-emerald-400",
-    mock: "text-amber-600 dark:text-amber-400",
-    none: "text-zinc-400",
+  const variants: Record<typeof source, "default" | "secondary" | "ghost"> = {
+    zigbee2mqtt: "default",
+    mock: "secondary",
+    none: "ghost",
   };
-  return <span className={`text-xs ${colors[source]}`}>{labels[source]}</span>;
+  return <Badge variant={variants[source]}>{labels[source]}</Badge>;
 }
 
 function EmptyState({ status }: { status: StatusResponse | null }) {
   const source = status?.discovery?.source;
   return (
-    <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-center dark:border-zinc-700 dark:bg-zinc-900/50">
-      <p className="mb-2 text-lg font-medium">No hay sensores</p>
-      {source === "zigbee2mqtt" ? (
-        <p className="text-sm text-zinc-500">
-          Zigbee2MQTT está conectado pero no hay dispositivos emparejados.
-          <br />
-          Usa <strong>Añadir dispositivo</strong> aquí arriba y resetea el aparato para que se una.
-        </p>
-      ) : source === "none" ? (
-        <p className="text-sm text-zinc-500">
-          Esperando inventario de Zigbee2MQTT (topic <code>zigbee2mqtt/bridge/devices</code>).
-          <br />
-          Verifica que Z2M está arrancado y conectado al broker MQTT.
-        </p>
-      ) : (
-        <p className="text-sm text-zinc-500">Lista vacía.</p>
-      )}
-    </div>
+    <Empty className="border">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <HugeiconsIcon icon={source === "none" ? RouterIcon : InboxIcon} />
+        </EmptyMedia>
+        <EmptyTitle>No hay sensores</EmptyTitle>
+        <EmptyDescription>
+          {source === "zigbee2mqtt" ? (
+            <>
+              Zigbee2MQTT está conectado pero no hay dispositivos emparejados. Usa{" "}
+              <strong>Añadir dispositivo</strong> aquí arriba y resetea el aparato para
+              que se una.
+            </>
+          ) : source === "none" ? (
+            <>
+              Esperando inventario de Zigbee2MQTT (topic{" "}
+              <code>zigbee2mqtt/bridge/devices</code>). Verifica que Z2M está arrancado y
+              conectado al broker MQTT.
+            </>
+          ) : (
+            "Lista vacía."
+          )}
+        </EmptyDescription>
+      </EmptyHeader>
+    </Empty>
   );
 }

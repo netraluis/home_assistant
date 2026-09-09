@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ComputerIcon, Moon02Icon, Sun03Icon } from "@hugeicons/core-free-icons";
+import { Button } from "@/components/ui/button";
 import {
   applyTheme,
   readStoredTheme,
@@ -52,14 +53,14 @@ export function ThemeToggle() {
   const label = theme ? LABEL[theme] : "Tema";
 
   return (
-    <button
-      type="button"
+    <Button
+      variant="outline"
+      size="icon-sm"
       onClick={cycle}
       title={`${label} (pulsa para cambiar)`}
       aria-label={label}
-      className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
     >
-      {theme && <HugeiconsIcon icon={ICON[theme]} size={16} strokeWidth={1.8} />}
-    </button>
+      {theme && <HugeiconsIcon icon={ICON[theme]} strokeWidth={1.8} />}
+    </Button>
   );
 }

@@ -2,7 +2,25 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { PairingEvent, PairingStatus } from "@home/shared";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Alert02Icon,
+  Cancel01Icon,
+  PlusSignIcon,
+  WifiConnected01Icon,
+} from "@hugeicons/core-free-icons";
 import { api } from "@/lib/api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 const POLL_OPEN_MS = 2000;
 // Cerrada también se sondea, más despacio: la ventana se puede haber abierto
@@ -60,47 +78,64 @@ export function PairingPanel({ onDeviceAdded }: { onDeviceAdded: () => void }) {
   }
 
   const open = state?.permitJoin ?? false;
+  const shownError = error ?? state?.error;
 
   return (
-    <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-medium">Añadir dispositivo</p>
-          <p className="text-xs text-zinc-500">
-            {open
-              ? `Red abierta · se cierra sola en ${state?.secondsLeft ?? 0}s. Resetea ahora el dispositivo para que se una.`
-              : `Abre la red ${state?.windowSeconds ?? 120}s para que un dispositivo nuevo pueda unirse.`}
-          </p>
-        </div>
-        <button
-          disabled={busy}
-          onClick={() => toggle(!open)}
-          className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${
-            open
-              ? "bg-amber-500 text-white hover:bg-amber-600"
-              : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-          }`}
-        >
-          {open ? `Cerrar ahora (${state?.secondsLeft ?? 0}s)` : "Abrir emparejamiento"}
-        </button>
-      </div>
+    <Card size="sm" className="mb-6">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <HugeiconsIcon
+            icon={WifiConnected01Icon}
+            size={18}
+            strokeWidth={1.8}
+            className={open ? "text-primary" : "text-muted-foreground"}
+          />
+          Añadir dispositivo
+        </CardTitle>
+        <CardDescription className="text-xs">
+          {open
+            ? `Red abierta · se cierra sola en ${state?.secondsLeft ?? 0}s. Resetea ahora el dispositivo para que se una.`
+            : `Abre la red ${state?.windowSeconds ?? 120}s para que un dispositivo nuevo pueda unirse.`}
+        </CardDescription>
+        <CardAction>
+          <Button
+            size="sm"
+            variant={open ? "destructive" : "default"}
+            disabled={busy}
+            onClick={() => toggle(!open)}
+          >
+            <HugeiconsIcon icon={open ? Cancel01Icon : PlusSignIcon} />
+            {open ? `Cerrar ahora (${state?.secondsLeft ?? 0}s)` : "Abrir emparejamiento"}
+          </Button>
+        </CardAction>
+      </CardHeader>
 
-      {(error || state?.error) && (
-        <p className="mt-2 text-xs text-red-600">{error ?? state?.error}</p>
-      )}
+      {(shownError || (state && state.events.length > 0)) && (
+        <CardContent className="flex flex-col gap-3">
+          {shownError && (
+            <Alert variant="destructive">
+              <HugeiconsIcon icon={Alert02Icon} />
+              <AlertDescription>{shownError}</AlertDescription>
+            </Alert>
+          )}
 
-      {state && state.events.length > 0 && (
-        <ol className="mt-3 space-y-1 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-          {state.events.map((e, i) => (
-            <li key={`${e.at}-${i}`} className="flex items-center gap-2 text-xs">
-              <EventDot event={e} />
-              <span className="font-mono text-zinc-400">{e.ieeeAddress}</span>
-              <span className="text-zinc-600 dark:text-zinc-300">{describe(e)}</span>
-            </li>
-          ))}
-        </ol>
+          {state && state.events.length > 0 && (
+            <>
+              <Separator />
+              <ol className="flex flex-col gap-1">
+                {state.events.map((e, i) => (
+                  <li key={`${e.at}-${i}`} className="flex items-center gap-2 text-xs">
+                    <EventDot event={e} />
+                    <span className="font-mono text-muted-foreground">{e.ieeeAddress}</span>
+                    <span className="text-foreground">{describe(e)}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+        </CardContent>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -124,9 +159,9 @@ function describe(e: PairingEvent): string {
 function EventDot({ event }: { event: PairingEvent }) {
   const color =
     event.type === "device_leave" || event.status === "failed"
-      ? "bg-red-500"
+      ? "bg-destructive"
       : event.status === "successful"
-        ? "bg-emerald-500"
-        : "bg-amber-500";
-  return <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${color}`} />;
+        ? "bg-primary"
+        : "bg-muted-foreground";
+  return <span className={`inline-block h-2 w-2 shrink-0 ${color}`} />;
 }

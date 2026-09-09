@@ -2,8 +2,30 @@
 
 import { useState } from "react";
 import type { SensorWithState } from "@home/shared";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  ArrowTurnBackwardIcon,
+  Cancel01Icon,
+  PencilEdit02Icon,
+  Tick02Icon,
+  ToggleOffIcon,
+  ToggleOnIcon,
+} from "@hugeicons/core-free-icons";
 import { api } from "@/lib/api";
 import { isStale, readState } from "@/lib/sensor";
+import { SENSOR_ICON } from "@/lib/icons";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 
 // Sensores controlables (luces y enchufes con `state` escribible).
 // Backend marca `controllable` desde Z2M exposes; fallback heurístico para mock.
@@ -40,105 +62,118 @@ export function SensorCard({
   }
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl" aria-hidden>
-            {sensor.icon}
-          </span>
-          <div>
-            {editing && sensor.ieeeAddress ? (
-              <NameEditor
-                ieeeAddress={sensor.ieeeAddress}
-                current={sensor.name}
-                canReset={sensor.name !== sensor.attributes.friendly_name}
-                onDone={() => {
-                  setEditing(false);
-                  onChanged();
-                }}
-                onCancel={() => setEditing(false)}
-              />
-            ) : (
-              <p className="group flex items-center gap-1 font-medium leading-tight">
-                {sensor.name}
-                {sensor.ieeeAddress && (
-                  <button
-                    onClick={() => setEditing(true)}
-                    aria-label={`Renombrar ${sensor.name}`}
-                    title="Renombrar"
-                    className="opacity-0 transition group-hover:opacity-100 focus:opacity-100"
-                  >
-                    ✏️
-                  </button>
-                )}
-              </p>
-            )}
-            <p className="text-xs text-zinc-400">
-              {sensor.vendor || sensor.model
-                ? `${sensor.vendor ?? ""} ${sensor.model ?? ""}`.trim()
-                : sensor.entityId}
-            </p>
-            {sensor.ieeeAddress && (
-              <p className="text-[10px] font-mono text-zinc-300 dark:text-zinc-600">
-                {sensor.ieeeAddress}
-              </p>
-            )}
-          </div>
-        </div>
-        <StateBadge on={on} raw={raw} stale={stale} type={sensor.type} value={value} unit={sensor.range?.unit} />
-      </div>
-
-      {canControl && (
-        <div className="flex items-center gap-2">
-          <button
-            disabled={pending}
-            onClick={() => send({ state: "ON" })}
-            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
-              on === true
-                ? "bg-emerald-500 text-white"
-                : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-            } disabled:opacity-50`}
-          >
-            Encender
-          </button>
-          <button
-            disabled={pending}
-            onClick={() => send({ state: "OFF" })}
-            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
-              on === false
-                ? "bg-zinc-700 text-white dark:bg-zinc-600"
-                : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-            } disabled:opacity-50`}
-          >
-            Apagar
-          </button>
-        </div>
-      )}
-
-      {canControl && sensor.type === "light" && sensor.range && (
-        <div className="mt-3">
-          <label className="mb-1 block text-xs text-zinc-400">
-            Brillo: {value ?? 0} / {sensor.range.max}
-          </label>
-          <input
-            type="range"
-            min={sensor.range.min}
-            max={sensor.range.max}
-            step={sensor.range.step}
-            defaultValue={value ?? 0}
-            disabled={pending}
-            onChange={(e) =>
-              send({ state: "ON", attributes: { brightness: Number(e.target.value) } })
-            }
-            className="w-full accent-emerald-500"
+    <Card size="sm">
+      <CardHeader>
+        {editing && sensor.ieeeAddress ? (
+          <NameEditor
+            ieeeAddress={sensor.ieeeAddress}
+            current={sensor.name}
+            canReset={sensor.name !== sensor.attributes.friendly_name}
+            onDone={() => {
+              setEditing(false);
+              onChanged();
+            }}
+            onCancel={() => setEditing(false)}
           />
-        </div>
-      )}
+        ) : (
+          <CardTitle className="group flex items-center gap-2">
+            <HugeiconsIcon
+              icon={SENSOR_ICON[sensor.type]}
+              size={18}
+              strokeWidth={1.8}
+              className="shrink-0 text-muted-foreground"
+            />
+            <span className="min-w-0 truncate">{sensor.name}</span>
+            {sensor.ieeeAddress && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setEditing(true)}
+                aria-label={`Renombrar ${sensor.name}`}
+                title="Renombrar"
+                className="opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
+              >
+                <HugeiconsIcon icon={PencilEdit02Icon} />
+              </Button>
+            )}
+          </CardTitle>
+        )}
 
-      {!canControl && (
-        <p className="text-xs text-zinc-400">Solo lectura</p>
-      )}
-    </div>
+        <CardDescription className="text-xs">
+          {sensor.vendor || sensor.model
+            ? `${sensor.vendor ?? ""} ${sensor.model ?? ""}`.trim()
+            : sensor.entityId}
+          {sensor.ieeeAddress && (
+            <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground/60">
+              {sensor.ieeeAddress}
+            </span>
+          )}
+        </CardDescription>
+
+        <CardAction>
+          <StateBadge
+            on={on}
+            raw={raw}
+            stale={stale}
+            type={sensor.type}
+            value={value}
+            unit={sensor.range?.unit}
+          />
+        </CardAction>
+      </CardHeader>
+
+      <CardContent className="flex flex-col gap-4">
+        {canControl ? (
+          <div className="flex items-center gap-2">
+            <Button
+              className="flex-1"
+              size="sm"
+              variant={on === true ? "default" : "outline"}
+              disabled={pending}
+              onClick={() => send({ state: "ON" })}
+            >
+              <HugeiconsIcon icon={ToggleOnIcon} />
+              Encender
+            </Button>
+            <Button
+              className="flex-1"
+              size="sm"
+              variant={on === false ? "secondary" : "outline"}
+              disabled={pending}
+              onClick={() => send({ state: "OFF" })}
+            >
+              <HugeiconsIcon icon={ToggleOffIcon} />
+              Apagar
+            </Button>
+          </div>
+        ) : (
+          <Badge variant="ghost">Solo lectura</Badge>
+        )}
+
+        {canControl && sensor.type === "light" && sensor.range && (
+          <div className="flex flex-col gap-2">
+            <label className="text-[0.625rem] font-semibold tracking-widest uppercase text-muted-foreground">
+              Brillo · {value ?? 0} / {sensor.range.max}
+            </label>
+            {/* onValueCommitted, no onValueChange: sólo publicamos en MQTT al
+                soltar, si no cada píxel de arrastre sería un mensaje. */}
+            <Slider
+              min={sensor.range.min}
+              max={sensor.range.max}
+              step={sensor.range.step}
+              defaultValue={value ?? 0}
+              disabled={pending}
+              onValueCommitted={(v) =>
+                send({
+                  state: "ON",
+                  attributes: { brightness: Array.isArray(v) ? v[0] : v },
+                })
+              }
+            />
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -186,36 +221,52 @@ function NameEditor({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1">
-        <input
+        <Input
           autoFocus
           value={value}
           disabled={busy}
           maxLength={64}
+          className="h-9"
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") save();
             if (e.key === "Escape") onCancel();
           }}
-          className="w-40 rounded border border-zinc-300 bg-white px-2 py-0.5 text-sm dark:border-zinc-700 dark:bg-zinc-800"
         />
-        <button onClick={save} disabled={busy} title="Guardar" aria-label="Guardar nombre">
-          ✅
-        </button>
-        <button onClick={onCancel} disabled={busy} title="Cancelar" aria-label="Cancelar">
-          ✖️
-        </button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={save}
+          disabled={busy}
+          title="Guardar"
+          aria-label="Guardar nombre"
+        >
+          <HugeiconsIcon icon={Tick02Icon} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onCancel}
+          disabled={busy}
+          title="Cancelar"
+          aria-label="Cancelar"
+        >
+          <HugeiconsIcon icon={Cancel01Icon} />
+        </Button>
         {canReset && (
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={() => run(() => api.resetName(ieeeAddress))}
             disabled={busy}
             title="Volver al nombre de Zigbee2MQTT"
             aria-label="Restablecer nombre"
           >
-            ↩️
-          </button>
+            <HugeiconsIcon icon={ArrowTurnBackwardIcon} />
+          </Button>
         )}
       </div>
-      {error && <span className="text-[10px] text-red-600">{error}</span>}
+      {error && <span className="text-[10px] text-destructive">{error}</span>}
     </div>
   );
 }
@@ -235,22 +286,29 @@ function StateBadge({
   value: number | null;
   unit?: string;
 }) {
-  if (stale) {
-    return <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-400 dark:bg-zinc-800">sin datos</span>;
-  }
+  if (stale) return <Badge variant="ghost">sin datos</Badge>;
   if (type === "slider") {
     return (
-      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+      <Badge>
         {value ?? "?"} {unit ?? ""}
-      </span>
+      </Badge>
     );
   }
-  const cls =
-    on === true
-      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-      : on === false
-        ? "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-        : "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300";
-  const label = on === true ? "ON" : on === false ? "OFF" : raw;
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>;
+  if (on === true) {
+    return (
+      <Badge>
+        <HugeiconsIcon icon={ToggleOnIcon} />
+        on
+      </Badge>
+    );
+  }
+  if (on === false) {
+    return (
+      <Badge variant="secondary">
+        <HugeiconsIcon icon={ToggleOffIcon} />
+        off
+      </Badge>
+    );
+  }
+  return <Badge variant="destructive">{raw}</Badge>;
 }
