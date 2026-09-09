@@ -26,5 +26,6 @@ Este directorio es la raíz del proyecto de domótica "Home Assistant Node". Act
     ```
 
 ## Notas Técnicas
+- El esquema de PostgreSQL se versiona con migraciones Drizzle en `services/drizzle/`, y el backend las aplica al arrancar: un despliegue nuevo crea sus propias tablas sin pasos manuales.
 - El archivo `docker-compose.yml` utiliza rutas relativas (`./data/...`) para los volúmenes, facilitando la portabilidad.
 - La configuración de red es dinámica vía variables de entorno (`DOCKER_NETWORK_MODE`): usa `bridge` en macOS para desarrollo y debe cambiarse a `host` en Raspberry Pi para permitir el descubrimiento de dispositivos (mDNS/UPnP).
