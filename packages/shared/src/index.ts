@@ -65,6 +65,35 @@ export interface StatusResponse {
   uptime: number;
 }
 
+// --- Emparejamiento de dispositivos nuevos ---
+
+export interface PairingEvent {
+  type: 'device_joined' | 'device_interview' | 'device_announce' | 'device_leave';
+  ieeeAddress: string;
+  friendlyName: string;
+  /** Solo en device_interview: 'started' | 'successful' | 'failed'. */
+  status?: string;
+  vendor?: string;
+  model?: string;
+  supported?: boolean;
+  at: string;
+}
+
+/** Respuesta de GET /api/pairing */
+export interface PairingStatus {
+  permitJoin: boolean;
+  secondsLeft: number;
+  windowSeconds: number;
+  error: string | null;
+  /** Más recientes primero, máximo 20. Se vacía al abrir una ventana nueva. */
+  events: PairingEvent[];
+}
+
+/** Body de POST /api/pairing */
+export interface PairingPayload {
+  enable: boolean;
+}
+
 /** Body de PUT /api/device/:ieeeAddress/name */
 export interface RenameDevicePayload {
   name: string;

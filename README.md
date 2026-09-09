@@ -128,6 +128,23 @@ Consulta: `GET /api/history/<entityId>?metric=power&limit=100`. Si las migracion
 fallaron, el backend arranca igual pero sin histórico — se ve en `db.ready` de
 `GET /api/status`.
 
+### Emparejar un dispositivo nuevo
+
+Desde el propio dashboard: **Añadir dispositivo** abre la red Zigbee 120 segundos y
+enseña la cuenta atrás y el progreso en vivo (`se ha unido` → `identificando…` →
+`listo · SONOFF S60ZBTPF`). Resetea el aparato mientras la ventana esté abierta.
+
+Mientras está abierta **cualquier** dispositivo Zigbee al alcance puede unirse, por
+eso el plazo es corto y Z2M la cierra sola aunque nadie pulse nada; el botón pasa a
+*Cerrar ahora* para no dejarla abierta por olvido.
+
+    GET  /api/pairing    → { permitJoin, secondsLeft, windowSeconds, error, events }
+    POST /api/pairing    {"enable": true}   # o false para cerrar ya
+
+Por debajo es `zigbee2mqtt/bridge/request/permit_join`; el estado se lee de
+`bridge/info` y el progreso de `bridge/event`. Borrar dispositivos no está expuesto
+a propósito: es destructivo y merece su propio flujo.
+
 ### Nombres de los dispositivos
 
 El nombre visible se edita desde el propio dashboard (icono ✏️ en la tarjeta) y se
