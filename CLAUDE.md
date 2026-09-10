@@ -21,6 +21,8 @@ Services (Docker Compose):
 - **zigbee2mqtt**: Zigbee device management (port 8080, requires USB dongle on RPi)
 - **app**: Custom Node.js/TypeScript backend (:3000, internal network only)
 - **web**: Next.js frontend (:3001) — the only public face
+- **tuya-bridge**: translates Tuya WiFi devices to MQTT (Python + tinytuya, `network_mode: host`,
+  under the `tuya` compose profile). Not Zigbee — see `tuya-bridge/README.md`
 
 ## Tech Stack
 
@@ -159,6 +161,8 @@ Defined in `.env` (see `.env.example`):
 - `MQTT_HOST`, `MQTT_PORT` — MQTT broker (default: localhost:1883)
 - `MQTT_USER`, `MQTT_PASSWORD` — MQTT auth
 - `PORT` — Backend port (default: 3000)
+- `MQTT_DEVICES` — JSON array of devices that do **not** come from Zigbee2MQTT (the Tuya relay via
+  `tuya-bridge`). Each needs at least `entityId` and `mqttTopic`; see `services/src/extraDevices.ts`
 - `CORS_ORIGIN` — Allowed origins for the backend, comma-separated (empty = allow all, dev)
 - `BACKEND_URL` — Where Next rewrites `/api/*`. Baked at **build time** (build-arg of the web
   image; `http://home_assistant:3000` on the Pi). Also honoured by `npm run dev:web`.
@@ -173,6 +177,9 @@ Defined in `.env` (see `.env.example`):
 - Drizzle ORM for database operations
 - MQTT for all device communication (no direct hardware access)
 - Sensor definitions centralized in `services/src/sensors.ts`
+- A device is anything that publishes state on a topic and obeys on `<topic>/set`. Nothing downstream
+  of MQTT knows about Zigbee, so a non-Zigbee device only needs a bridge that speaks MQTT plus an
+  entry in `MQTT_DEVICES` — no changes to control, persistence or the UI
 - Frontend = Next.js App Router; interactive UI lives in client components under `web/components/`
 - **Always build the UI from the shadcn components in `web/components/ui/`** — don't hand-roll
   a `<button>` or `<div>` card. They are vendored code: edit them in place to change the look

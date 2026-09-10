@@ -1,0 +1,38 @@
+name: build-tuya-bridge
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tuya-bridge/**'
+      - '.github/workflows/build-tuya-bridge.yml'
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with:
+          image: tonistiigi/binfmt:qemu-v8.1.5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          # Contexto = raíz del repo: el Dockerfile copia tuya-bridge/
+          context: .
+          file: ./tuya-bridge/Dockerfile
+          platforms: linux/arm64
+          push: true
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/home_assistant-tuya-bridge:latest
+            ghcr.io/${{ github.repository_owner }}/home_assistant-tuya-bridge:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

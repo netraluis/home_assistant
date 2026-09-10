@@ -128,9 +128,12 @@ function ConnBadge({
 function DiscoveryBadge({ status }: { status: StatusResponse | null }) {
   // Defensa: backend antiguo sin campo `discovery` no debe crashear el dashboard.
   if (!status?.discovery) return null;
-  const { source, deviceCount } = status.discovery;
+  const { source, deviceCount, extraCount = 0 } = status.discovery;
+  // Los que no son Zigbee se cuentan aparte: si no, la chapa diría que la red
+  // Zigbee tiene más nodos de los que tiene.
+  const extra = extraCount > 0 ? ` + ${extraCount} WiFi` : "";
   const labels: Record<typeof source, string> = {
-    zigbee2mqtt: `Z2M · ${deviceCount} dispositivo${deviceCount === 1 ? "" : "s"}`,
+    zigbee2mqtt: `Z2M · ${deviceCount} dispositivo${deviceCount === 1 ? "" : "s"}${extra}`,
     mock: `mock · ${deviceCount} sensor${deviceCount === 1 ? "" : "es"} estáticos`,
     none: "esperando inventario Z2M…",
   };
