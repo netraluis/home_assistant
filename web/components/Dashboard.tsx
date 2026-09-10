@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { SensorCard } from "@/components/SensorCard";
 import { PairingPanel } from "@/components/PairingPanel";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Logo } from "@/components/Logo";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -53,11 +54,14 @@ export function Dashboard() {
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
       <header className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-wider uppercase">
-            Home Control
-          </h1>
-          <p className="text-sm text-muted-foreground">Proyecto Andorra</p>
+        <div className="flex items-center gap-3">
+          <Logo className="size-9 shrink-0 text-primary" />
+          <div>
+            <h1 className="font-heading text-2xl font-semibold tracking-wider uppercase">
+              Home Control
+            </h1>
+            <p className="text-sm text-muted-foreground">Proyecto Andorra</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-end gap-1">
