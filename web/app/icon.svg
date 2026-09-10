@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Marca de Home Control: una casa con el pulso de consumo atravesándola.
+       Esquinas rectas, sin curvas: el estilo base-sera del preset (rounded-none).
+       Verde #008236 = el primary del tema en claro (oklch 0.527 0.154 150.069). -->
+  <mask id="hc-pulse">
+    <rect width="32" height="32" fill="#fff"/>
+    <path d="M5 23h4.5L12 16l4 10 2.5-3H27" fill="none" stroke="#000" stroke-width="2.75"/>
+  </mask>
+  <g mask="url(#hc-pulse)" fill="#008236">
+    <path d="M16 2 31 14H1Z"/>
+    <path d="M4.5 14h23v16h-23Z"/>
+  </g>
+</svg>

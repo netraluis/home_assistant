@@ -23,6 +23,10 @@ import {
 import { Separator } from "@/components/ui/separator";
 
 const POLL_OPEN_MS = 2000;
+// Cuánto sigue en pantalla el registro después del último evento. Mientras el
+// emparejamiento avanza llegan eventos cada pocos segundos y la lista se
+// mantiene sola; cuando el dispositivo ya está dentro deja de aportar y se va.
+const EVENTS_TTL_MS = 15000;
 // Cerrada también se sondea, más despacio: la ventana se puede haber abierto
 // desde la UI de Z2M, y aquí debe verse igual.
 const POLL_IDLE_MS = 10000;
@@ -80,6 +84,22 @@ export function PairingPanel({ onDeviceAdded }: { onDeviceAdded: () => void }) {
   const open = state?.permitJoin ?? false;
   const shownError = error ?? state?.error;
 
+  // Los eventos vienen del backend con el más reciente primero.
+  const newestAt = state?.events[0]?.at;
+  const age = newestAt ? Date.now() - new Date(newestAt).getTime() : Infinity;
+  const showEvents = age < EVENTS_TTL_MS;
+
+  // El sondeo en reposo va cada 10s, demasiado lento para que la lista
+  // desaparezca a tiempo: un temporizador fuerza el repintado justo al vencer.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!newestAt) return;
+    const left = EVENTS_TTL_MS - (Date.now() - new Date(newestAt).getTime());
+    if (left <= 0) return;
+    const t = setTimeout(() => tick((n) => n + 1), left);
+    return () => clearTimeout(t);
+  }, [newestAt]);
+
   return (
     <Card size="sm" className="mb-6">
       <CardHeader>
@@ -110,7 +130,7 @@ export function PairingPanel({ onDeviceAdded }: { onDeviceAdded: () => void }) {
         </CardAction>
       </CardHeader>
 
-      {(shownError || (state && state.events.length > 0)) && (
+      {(shownError || showEvents) && (
         <CardContent className="flex flex-col gap-3">
           {shownError && (
             <Alert variant="destructive">
@@ -119,7 +139,7 @@ export function PairingPanel({ onDeviceAdded }: { onDeviceAdded: () => void }) {
             </Alert>
           )}
 
-          {state && state.events.length > 0 && (
+          {showEvents && state && (
             <>
               <Separator />
               <ol className="flex flex-col gap-1">
