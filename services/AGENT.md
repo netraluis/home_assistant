@@ -1,16 +1,24 @@
 # AGENT Context: Servicios Backend (Node.js)
 
 ## Contexto
-Este directorio contiene el microservicio "Custom Backend" desarrollado en Node.js. Su función es interactuar con la API de Home Assistant, gestionar la persistencia de datos históricos de sensores en PostgreSQL usando Drizzle ORM, y proveer herramientas de simulación (mocking) para desarrollo local.
+Este directorio contiene el backend en Node.js. **No hay Home Assistant en ninguna parte**:
+el backend habla MQTT directamente con Mosquitto, descubre los dispositivos por los topics
+`zigbee2mqtt/bridge/*` de Zigbee2MQTT, guarda el histórico de sensores en PostgreSQL con
+Drizzle ORM y expone la API REST que consume el frontend. También trae un simulador para
+desarrollar sin hardware.
 
 ## Distribución de Carpetas
 
 - **`src/`**: Código fuente TypeScript.
     - **`db/`**: Definiciones de esquema de base de datos (`schema.ts`).
     - **`index.ts`**: Punto de entrada de la aplicación.
-    - **`mock_sensors.ts`**: Script para inyectar datos falsos en Home Assistant.
+    - **`mock_sensors.ts`**: Script que publica lecturas falsas en MQTT.
+    - **`sensors.ts`**: Definición estática de sensores (fallback cuando Z2M no responde).
 - **`drizzle/`**: Migraciones de base de datos generadas automáticamente.
-- **`Dockerfile`**: Definición del contenedor para despliegue en Docker.
+- **`Dockerfile`**: Definición del contenedor. Se construye desde la **raíz** del monorepo
+  (`docker build -f services/Dockerfile .`) e instala solo los workspaces `services` y
+  `packages/shared`: un `npm ci` sin acotar arrastraría el árbol de `web` (Next, Base UI…),
+  que no pinta nada aquí y que bajo la emulación QEMU arm64 del CI hace segfault a npm.
 
 ## Cómo Arrancar esta Parcela (Desarrollo y Lógica)
 
@@ -54,7 +62,7 @@ npm start
 ### 4. Simulación (Mocking)
 Para simular sensores sin tener hardware real conectado:
 ```bash
-# Ejecuta un script que envía datos periódicos a Home Assistant
+# Publica lecturas periódicas en MQTT; el backend las trata como si fueran reales
 npm run mock
 ```
-*Nota: Requiere que Home Assistant esté corriendo y el token configurado en `.env`.*
+*Nota: requiere que Mosquitto esté levantado (`docker compose up -d mosquitto`).*

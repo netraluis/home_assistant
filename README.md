@@ -43,6 +43,8 @@ Sensores ← Zigbee → Dongle USB → Zigbee2MQTT → Mosquitto (MQTT) → Node
 - **Zigbee2MQTT**: Gestión de la red Zigbee
 - **Mosquitto**: Broker MQTT
 - **Next.js 16 + React 19 + Tailwind 4**: Frontend / PWA (`web/`)
+- **shadcn/ui** (preset `b6SIAAKX9E`, estilo `base-sera`): componentes en `web/components/ui/`,
+  sobre **Base UI** (no Radix) e iconos **Hugeicons**. Config en `web/components.json`
 
 ## Estructura del Proyecto
 
@@ -66,9 +68,11 @@ Monorepo con npm workspaces: `services/` (backend), `web/` (frontend), `packages
 │   └── drizzle/                # Migraciones SQL versionadas (se aplican al arrancar)
 └── web/                        # Frontend Next.js
     ├── Dockerfile  next.config.ts  package.json
-    ├── app/                    # layout.tsx, page.tsx
-    ├── components/             # Dashboard.tsx, SensorCard.tsx
-    └── lib/                    # api.ts (cliente fetch), sensor.ts (helpers de estado)
+    ├── components.json         # config de shadcn (estilo, tokens, alias, iconos)
+    ├── app/                    # layout.tsx, page.tsx, globals.css (tokens del tema)
+    ├── components/             # Dashboard.tsx, SensorCard.tsx, PairingPanel.tsx, ThemeToggle.tsx
+    │   └── ui/                 # componentes de shadcn (button, card, badge, slider…)
+    └── lib/                    # api.ts (cliente fetch), sensor.ts, theme.ts, icons.ts
 ```
 
 ## Instrucciones de Inicio
@@ -105,8 +109,10 @@ npm run dev:api             # backend en http://localhost:3000
 npm run dev:web             # frontend en http://localhost:3001
 ```
 
-El frontend (Next.js) llama al backend por HTTP; CORS está habilitado en el backend.
-Para apuntar a otro backend: `NEXT_PUBLIC_API_URL=http://otra-ip:3000 npm run dev:web`.
+El navegador **no** llama al backend directamente: pide rutas relativas `/api/*` y Next
+las reescribe al backend (`next.config.ts`), así que es siempre el mismo origen y no hay
+CORS de por medio. El destino sale de `BACKEND_URL`, que por defecto es
+`http://localhost:3000`; para apuntar a otro: `BACKEND_URL=http://otra-ip:3000 npm run dev:web`.
 
 ### 5. Simular sensores (sin hardware)
 
@@ -161,17 +167,36 @@ quieras.
     PUT    /api/device/<ieee>/name   {"name": "Enchufe salón"}
     DELETE /api/device/<ieee>/name   # vuelve al friendly_name de Z2M
 
+### La interfaz
+
+El dashboard está construido con los componentes de **shadcn/ui** que viven en
+`web/components/ui/` (traídos con `npx shadcn add …`, no son una dependencia: son código
+del repo y se editan). El preset es `b6SIAAKX9E`, estilo `base-sera`: esquinas rectas,
+botones y etiquetas en mayúsculas, Space Grotesk en los títulos e Inter en el cuerpo.
+
+Los colores salen de los tokens de `app/globals.css`, nunca de clases de color a mano, y
+los iconos de **Hugeicons** (`@hugeicons/react` + `@hugeicons/core-free-icons`).
+
+**Tema claro/oscuro**: el botón de la cabecera cicla sistema → claro → oscuro. shadcn usa
+dark mode por clase (`@custom-variant dark (&:is(.dark *))`), así que el tema es la
+presencia de `.dark` en `<html>`; la lógica está en `lib/theme.ts` y el script que la
+aplica va inline en el `<head>` para que no haya destello blanco al cargar.
+
 ### Todo junto con Docker
 
 ```bash
 docker-compose up -d        # postgres, mosquitto, zigbee2mqtt, app (:3000), web (:3001)
 ```
 
-La imagen `web` hornea la URL del backend en build time: ajusta `WEB_API_URL` en `.env` si el navegador no accede al backend por `http://localhost:3000`.
+La imagen `web` **hornea** la URL del backend: Next evalúa `rewrites()` en build time, no en
+runtime. Se pasa como build-arg `BACKEND_URL` (en la Pi, `http://home_assistant:3000`, el
+nombre del container en la red Docker interna). Cambiarla en runtime no tiene efecto: hay
+que reconstruir la imagen.
 
 ## Producción (Raspberry Pi)
 
 1. Conectar el dongle Zigbee USB
 2. En `docker-compose.yml`, descomentar la línea `devices` para mapear `/dev/ttyACM0`
-3. Emparejar dispositivos desde el panel de Zigbee2MQTT (http://localhost:8080)
+3. Emparejar dispositivos desde el propio dashboard (**Añadir dispositivo**); la UI de
+   Zigbee2MQTT en http://localhost:8080 sigue disponible para lo que no está expuesto
 4. Los dispositivos publicarán automáticamente en MQTT y el backend los procesará
