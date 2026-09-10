@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { SensorWithState } from "@home/shared";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -11,6 +11,8 @@ import {
   ToggleOffIcon,
   ToggleOnIcon,
 } from "@hugeicons/core-free-icons";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 import { isStale, readState } from "@/lib/sensor";
 import { SENSOR_ICON } from "@/lib/icons";
@@ -44,12 +46,34 @@ export function SensorCard({
 }) {
   const [pending, setPending] = useState(false);
   const [editing, setEditing] = useState(false);
+  // Posición que ha pedido el usuario, mientras el backend confirma. El sondeo
+  // tarda hasta 2s: sin esto el interruptor saltaría atrás al soltarlo.
+  const [optimistic, setOptimistic] = useState<boolean | null>(null);
   const { on, raw, value } = readState(sensor);
   const stale = isStale(sensor);
   const canControl =
     sensor.controllable ??
     ((sensor.type === "light" || sensor.type === "toggle") &&
       !READONLY_TOGGLES.has(sensor.entityId));
+  const shown = optimistic ?? on;
+  const switchId = `switch-${sensor.entityId}`;
+
+  useEffect(() => {
+    if (optimistic !== null && on === optimistic) setOptimistic(null);
+  }, [on, optimistic]);
+
+  async function toggle(next: boolean) {
+    setOptimistic(next);
+    setPending(true);
+    try {
+      await api.control(sensor.entityId, { state: next ? "ON" : "OFF" });
+      onChanged();
+    } catch {
+      setOptimistic(null); // no salió: que vuelva a enseñar el estado real
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function send(body: Parameters<typeof api.control>[1]) {
     setPending(true);
@@ -110,41 +134,35 @@ export function SensorCard({
           )}
         </CardDescription>
 
-        <CardAction>
-          <StateBadge
-            on={on}
-            raw={raw}
-            stale={stale}
-            type={sensor.type}
-            value={value}
-            unit={sensor.range?.unit}
-          />
-        </CardAction>
+        {/* Con interruptor la chapa de ON/OFF sobra: diría lo mismo dos veces.
+            Se queda para lo que el interruptor no cuenta — sin datos, estado
+            desconocido, o sensores de solo lectura. */}
+        {(!canControl || stale || on === null) && (
+          <CardAction>
+            <StateBadge
+              on={on}
+              raw={raw}
+              stale={stale}
+              type={sensor.type}
+              value={value}
+              unit={sensor.range?.unit}
+            />
+          </CardAction>
+        )}
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
         {canControl ? (
-          <div className="flex items-center gap-2">
-            <Button
-              className="flex-1"
-              size="sm"
-              variant={on === true ? "default" : "outline"}
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor={switchId} className="cursor-pointer">
+              {shown === true ? "Encendido" : shown === false ? "Apagado" : "Sin estado"}
+            </Label>
+            <Switch
+              id={switchId}
+              checked={shown === true}
               disabled={pending}
-              onClick={() => send({ state: "ON" })}
-            >
-              <HugeiconsIcon icon={ToggleOnIcon} />
-              Encender
-            </Button>
-            <Button
-              className="flex-1"
-              size="sm"
-              variant={on === false ? "secondary" : "outline"}
-              disabled={pending}
-              onClick={() => send({ state: "OFF" })}
-            >
-              <HugeiconsIcon icon={ToggleOffIcon} />
-              Apagar
-            </Button>
+              onCheckedChange={toggle}
+            />
           </div>
         ) : (
           <Badge variant="ghost">Solo lectura</Badge>
