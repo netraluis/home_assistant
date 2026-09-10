@@ -8,6 +8,7 @@ import { and, eq, desc } from 'drizzle-orm';
 import * as dotenv from 'dotenv';
 import path from 'path';
 import { sensorData, deviceMeta } from './db/schema';
+import { parseExtraDevices } from './extraDevices';
 import { SENSORS } from './sensors';
 import type { SensorDef, SensorRange, SensorType } from './sensors';
 
@@ -161,6 +162,11 @@ async function loadDeviceNames(): Promise<void> {
 // --- Vista unificada: union de Z2M descubierto + overrides estáticos (SENSORS) ---
 type SensorMeta = SensorDef & { paired: boolean; controllable: boolean };
 
+// Dispositivos que no son Zigbee y por tanto nunca saldrán en bridge/devices
+// (el relé Tuya por WiFi, vía tuya-bridge). Se declaran en MQTT_DEVICES.
+const extraDevices = parseExtraDevices(process.env.MQTT_DEVICES);
+const extraByTopic = new Map(extraDevices.map(d => [d.mqttTopic, d]));
+
 function buildMetaFromZ2M(z2m: Z2MDevice): SensorMeta {
   const exposes = z2m.definition?.exposes;
   const type = inferType(exposes);
@@ -189,15 +195,21 @@ function buildMetaFromZ2M(z2m: Z2MDevice): SensorMeta {
 }
 
 function getAllSensors(): SensorMeta[] {
+  // Los declarados a mano acompañan siempre a lo que descubramos: no dependen
+  // de que Z2M esté vivo, porque no pasan por Z2M.
+  const extra: SensorMeta[] = extraDevices.map(d => ({ ...d, paired: true }));
   if (discoverySource === 'zigbee2mqtt') {
-    return Array.from(discoveredDevices.values()).map(buildMetaFromZ2M);
+    return [...Array.from(discoveredDevices.values()).map(buildMetaFromZ2M), ...extra];
   }
   // Sin Z2M aún → fallback al SENSORS estático (útil para `npm run mock`).
-  return SENSORS.map(s => ({
-    ...s,
-    paired: false,
-    controllable: s.type === 'light' || s.type === 'toggle',
-  }));
+  return [
+    ...SENSORS.map(s => ({
+      ...s,
+      paired: false,
+      controllable: s.type === 'light' || s.type === 'toggle',
+    })),
+    ...extra,
+  ];
 }
 
 function findSensor(entityId: string): SensorMeta | undefined {
@@ -270,6 +282,7 @@ mqttClient.on('connect', () => {
   mqttConnected = true;
   console.log('MQTT conectado');
   mqttClient.subscribe('zigbee2mqtt/#');
+  for (const device of extraDevices) mqttClient.subscribe(device.mqttTopic);
   // Si tras 5s no hemos recibido bridge/devices (Z2M no está) → modo mock.
   setTimeout(() => {
     if (discoverySource === 'none') {
@@ -353,8 +366,13 @@ mqttClient.on('message', async (topic, message) => {
   //    o desde el SENSORS estático (modo mock).
   const friendlyName = topic.replace(/^zigbee2mqtt\//, '');
   const z2m = discoveredDevices.get(friendlyName);
+  const extra = extraByTopic.get(topic);
   let sensor: SensorMeta | undefined;
-  if (z2m) {
+  if (extra) {
+    // No toca `discoverySource`: que llegue un mensaje de un dispositivo
+    // declarado a mano no dice nada sobre si Z2M está vivo o no.
+    sensor = { ...extra, paired: true };
+  } else if (z2m) {
     sensor = buildMetaFromZ2M(z2m);
   } else {
     const staticDef = SENSORS.find(s => s.mqttTopic === topic);
@@ -466,6 +484,9 @@ app.get('/api/status', (_req, res) => {
           : discoverySource === 'mock'
             ? SENSORS.length
             : 0,
+      // Los declarados a mano van aparte: no los descubre nadie, y mezclarlos
+      // con la cuenta de Z2M haría creer que la red Zigbee tiene más nodos.
+      extraCount: extraDevices.length,
       lastUpdate: discoveryLastUpdate,
     },
     uptime: process.uptime(),

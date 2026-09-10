@@ -62,6 +62,30 @@ services:
     ports:
       - "3000:3000"
 
+  # Puente para dispositivos Tuya WiFi (no Zigbee): habla el protocolo de Tuya
+  # por la LAN y lo traduce a MQTT. Sin `tuya-devices.json` no arranca, así que
+  # queda bajo un perfil: `docker compose --profile tuya up -d`.
+  tuya-bridge:
+    build:
+      context: .
+      dockerfile: tuya-bridge/Dockerfile
+    container_name: home_tuya_bridge
+    restart: unless-stopped
+    profiles: [tuya]
+    depends_on:
+      - mosquitto
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      TOPIC_PREFIX: tuya
+      POLL_SECONDS: 10
+    volumes:
+      # Contiene las local_key de los dispositivos: solo lectura y fuera de git.
+      - ./tuya-devices.json:/config/tuya-devices.json:ro
+    # El descubrimiento de Tuya va por broadcast UDP en la LAN, que no cruza el
+    # bridge de Docker. Sin `host` el puente no encuentra los dispositivos.
+    network_mode: host
+
   # Frontend Next.js
   web:
     build:

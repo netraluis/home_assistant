@@ -60,6 +60,8 @@ export interface StatusResponse {
     /** 'zigbee2mqtt' = lista real de Z2M; 'mock' = fallback al SENSORS estático; 'none' = aún sin datos. */
     source: 'zigbee2mqtt' | 'mock' | 'none';
     deviceCount: number;
+    /** Dispositivos declarados a mano en `MQTT_DEVICES` (los que no son Zigbee). */
+    extraCount?: number;
     lastUpdate: string | null;
   };
   uptime: number;

@@ -167,6 +167,29 @@ quieras.
     PUT    /api/device/<ieee>/name   {"name": "Enchufe salón"}
     DELETE /api/device/<ieee>/name   # vuelve al friendly_name de Z2M
 
+### Dispositivos que no son Zigbee
+
+Zigbee2MQTT solo ve la radio Zigbee. Un aparato WiFi —como el relé Tuya TONGOU—
+nunca aparecerá en `bridge/devices`, así que entra por otro sitio: un **puente**
+que habla su protocolo por la LAN y lo traduce a MQTT, exactamente el mismo papel
+que Z2M juega para Zigbee.
+
+```
+relé Tuya ──LAN, protocolo Tuya──▶ tuya-bridge ──MQTT──▶ mosquitto ──▶ backend
+```
+
+El puente vive en `tuya-bridge/` (ver su README). Para que el dispositivo salga en
+el dashboard se declara en la variable `MQTT_DEVICES` del backend:
+
+```
+MQTT_DEVICES=[{"entityId":"rele_cuadro","name":"Relé cuadro","type":"toggle","mqttTopic":"tuya/rele_cuadro"}]
+```
+
+A partir de ahí el sistema lo trata como a cualquier otro: encender y apagar, el
+histórico de consumo y la tarjeta del dashboard funcionan sin ningún caso especial,
+porque lo único que el backend asume de un dispositivo es que publica su estado en
+un topic y obedece en `<topic>/set`.
+
 ### La interfaz
 
 El dashboard está construido con los componentes de **shadcn/ui** que viven en
