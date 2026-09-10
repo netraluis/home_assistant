@@ -80,8 +80,10 @@ services:
       TOPIC_PREFIX: tuya
       POLL_SECONDS: 10
     volumes:
-      # Contiene las local_key de los dispositivos: solo lectura y fuera de git.
-      - ./tuya-devices.json:/config/tuya-devices.json:ro
+      # El DIRECTORIO, no el fichero: el puente reescribe devices.json al
+      # refrescar desde la nube, y `os.replace` no funciona sobre un bind-mount
+      # de un fichero suelto. Dentro van las local_key, así que fuera de git.
+      - ./data/tuya:/config
     # El descubrimiento de Tuya va por broadcast UDP en la LAN, que no cruza el
     # bridge de Docker. Sin `host` el puente no encuentra los dispositivos.
     network_mode: host

@@ -40,4 +40,4 @@ Desktop.ini
 .playwright-mcp/
 
 # Claves de los dispositivos Tuya (local_key). Nunca a git.
-tuya-devices.json
+data/tuya/
