@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, doublePrecision, index } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, doublePrecision, index, boolean } from 'drizzle-orm/pg-core';
 
 export const sensorData = pgTable(
   'sensor_data',
@@ -25,4 +25,23 @@ export const deviceMeta = pgTable('device_meta', {
   ieeeAddress: text('ieee_address').primaryKey(),
   displayName: text('display_name').notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Dispositivos que NO vienen de Zigbee2MQTT: los que entran por un puente
+// (el relé Tuya por WiFi, por ejemplo). Antes vivían en la variable de entorno
+// MQTT_DEVICES, lo que obligaba a editar el compose y reiniciar para dar uno de
+// alta. Aquí, adoptar un dispositivo es un INSERT y se puede hacer desde la UI.
+//
+// El contrato es el mismo que para cualquier dispositivo del sistema: publica su
+// estado en `mqttTopic` y obedece en `<mqttTopic>/set`.
+export const mqttDevices = pgTable('mqtt_devices', {
+  entityId: text('entity_id').primaryKey(),
+  name: text('name').notNull(),
+  type: text('type').notNull(),          // 'light' | 'toggle' | 'slider'
+  mqttTopic: text('mqtt_topic').notNull().unique(),
+  icon: text('icon'),
+  vendor: text('vendor'),
+  model: text('model'),
+  controllable: boolean('controllable').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });

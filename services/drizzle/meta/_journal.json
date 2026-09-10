@@ -15,6 +15,13 @@
       "when": 1788987289974,
       "tag": "0001_lush_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789052896828,
+      "tag": "0002_worried_deathstrike",
+      "breakpoints": true
     }
   ]
 }
