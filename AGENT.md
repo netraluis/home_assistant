@@ -7,7 +7,11 @@ Este directorio es la raíz del proyecto de domótica "Home Assistant Node". Act
 
 - **`/` (Root)**: Contiene la configuración de infraestructura (`docker-compose.yml`) y variables de entorno.
 - **`services/`**: Contiene la lógica de negocio personalizada (Node.js + Drizzle ORM) y scripts de simulación.
-- **`data/`**: Directorio destinado a volúmenes persistentes de Docker (Base de datos, configuración de HA, Mosquitto). *Este directorio está ignorado en git.*
+- **`web/`**: Frontend Next.js (única cara pública). La UI se construye con los componentes de
+  shadcn/ui que viven en `web/components/ui/`.
+- **`packages/shared/`**: Tipos TypeScript compartidos entre backend y frontend (`@home/shared`).
+- **`data/`**: Directorio destinado a volúmenes persistentes de Docker (Postgres, Mosquitto y la
+  configuración y base de datos de Zigbee2MQTT). *Este directorio está ignorado en git.*
 
 ## Cómo Arrancar esta Parcela (Infraestructura)
 
@@ -28,4 +32,10 @@ Este directorio es la raíz del proyecto de domótica "Home Assistant Node". Act
 ## Notas Técnicas
 - El esquema de PostgreSQL se versiona con migraciones Drizzle en `services/drizzle/`, y el backend las aplica al arrancar: un despliegue nuevo crea sus propias tablas sin pasos manuales.
 - El archivo `docker-compose.yml` utiliza rutas relativas (`./data/...`) para los volúmenes, facilitando la portabilidad.
-- La configuración de red es dinámica vía variables de entorno (`DOCKER_NETWORK_MODE`): usa `bridge` en macOS para desarrollo y debe cambiarse a `host` en Raspberry Pi para permitir el descubrimiento de dispositivos (mDNS/UPnP).
+- La red **no** usa `host`: hay dos redes declaradas en el compose. `default` es interna y por
+  ella hablan `web` → `app` → `postgres`/`mosquitto`; `lab` es externa y sirve para que
+  `cloudflared` alcance **solo** a `home_assistant_web`. El backend y la base de datos no son
+  alcanzables desde fuera. (La variable `DOCKER_NETWORK_MODE` del `.env` es un resto de una
+  versión anterior y ya no la lee nadie.)
+- Zigbee no necesita mDNS ni descubrimiento de red: entra por el dongle USB mapeado en el
+  servicio `zigbee2mqtt`.
