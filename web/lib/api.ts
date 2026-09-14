@@ -1,5 +1,8 @@
 import type {
   ControlPayload,
+  MqttDeviceInput,
+  SensorDef,
+  TuyaStatus,
   DeviceNameResponse,
   HistoryRow,
   PairingStatus,
@@ -49,4 +52,14 @@ export const api = {
       `/api/sensor/${entityId}`,
       { method: "POST", body: JSON.stringify(body) },
     ),
+
+  // --- Dispositivos que no son Zigbee (entran por un puente) ---
+  tuya: () => http<TuyaStatus>("/api/tuya"),
+  refreshTuya: () =>
+    http<{ ok: boolean }>("/api/tuya/refresh", { method: "POST", body: "{}" }),
+  adoptDevice: (device: MqttDeviceInput) =>
+    http<SensorDef>("/api/devices/mqtt", {
+      method: "POST",
+      body: JSON.stringify(device),
+    }),
 };

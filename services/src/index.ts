@@ -7,8 +7,8 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { and, eq, desc } from 'drizzle-orm';
 import * as dotenv from 'dotenv';
 import path from 'path';
-import { sensorData, deviceMeta } from './db/schema';
-import { parseExtraDevices } from './extraDevices';
+import { sensorData, deviceMeta, mqttDevices } from './db/schema';
+import { parseExtraDevices, type ExtraDevice } from './extraDevices';
 import { SENSORS } from './sensors';
 import type { SensorDef, SensorRange, SensorType } from './sensors';
 
@@ -163,9 +163,69 @@ async function loadDeviceNames(): Promise<void> {
 type SensorMeta = SensorDef & { paired: boolean; controllable: boolean };
 
 // Dispositivos que no son Zigbee y por tanto nunca saldrán en bridge/devices
-// (el relé Tuya por WiFi, vía tuya-bridge). Se declaran en MQTT_DEVICES.
-const extraDevices = parseExtraDevices(process.env.MQTT_DEVICES);
-const extraByTopic = new Map(extraDevices.map(d => [d.mqttTopic, d]));
+// (el relé Tuya por WiFi, vía tuya-bridge). Viven en la tabla `mqtt_devices`,
+// no en el entorno: dar uno de alta es un INSERT y no hace falta redesplegar.
+//
+// `MQTT_DEVICES` se sigue leyendo, pero solo como SEMILLA: lo que declare se
+// inserta al arrancar si no estaba ya. Así los que se declararon en el compose
+// antes de existir la tabla se adoptan solos, y sin BD el backend sigue
+// sirviéndolos aunque no se puedan editar.
+const seedDevices = parseExtraDevices(process.env.MQTT_DEVICES);
+let extraDevices: ExtraDevice[] = seedDevices;
+let extraByTopic = new Map(seedDevices.map(d => [d.mqttTopic, d]));
+
+function setExtraDevices(list: ExtraDevice[]): void {
+  extraDevices = list;
+  extraByTopic = new Map(list.map(d => [d.mqttTopic, d]));
+  // Suscribirse de más es inocuo; lo que no puede pasar es que un dispositivo
+  // recién adoptado se quede mudo hasta el siguiente reinicio.
+  if (mqttConnected) for (const d of list) mqttClient.subscribe(d.mqttTopic);
+}
+
+function deviceToRow(d: ExtraDevice) {
+  return {
+    entityId: d.entityId,
+    name: d.name,
+    type: d.type,
+    mqttTopic: d.mqttTopic,
+    icon: d.icon,
+    vendor: d.vendor ?? null,
+    model: d.model ?? null,
+    controllable: d.controllable,
+  };
+}
+
+function rowToDevice(r: typeof mqttDevices.$inferSelect): ExtraDevice {
+  return {
+    entityId: r.entityId,
+    name: r.name,
+    type: r.type as ExtraDevice['type'],
+    icon: r.icon ?? '⚡',
+    mqttTopic: r.mqttTopic,
+    attributes: { friendly_name: r.name },
+    controllable: r.controllable,
+    ...(r.vendor ? { vendor: r.vendor } : {}),
+    ...(r.model ? { model: r.model } : {}),
+  };
+}
+
+async function loadMqttDevices(): Promise<void> {
+  if (!DATABASE_URL || !dbReady) {
+    setExtraDevices(seedDevices);
+    return;
+  }
+  const rows = await db.select().from(mqttDevices);
+  setExtraDevices(rows.map(rowToDevice));
+  console.log(`Dispositivos no-Zigbee: ${extraDevices.length}`);
+}
+
+/** Adopta lo que declare el entorno, para no perder lo que ya había. */
+async function seedMqttDevices(): Promise<void> {
+  if (!dbReady || seedDevices.length === 0) return;
+  for (const d of seedDevices) {
+    await db.insert(mqttDevices).values(deviceToRow(d)).onConflictDoNothing();
+  }
+}
 
 function buildMetaFromZ2M(z2m: Z2MDevice): SensorMeta {
   const exposes = z2m.definition?.exposes;
@@ -238,6 +298,26 @@ function shouldPersist(sensorId: string, metric: string, value: number): boolean
   return true;
 }
 
+// --- Descubrimiento de dispositivos Tuya (WiFi) ---
+// El puente publica en `<prefijo>/bridge/devices` lo que hay en la cuenta de
+// Tuya, y escucha `<prefijo>/bridge/request/refresh`. Es el mismo patrón que usa
+// Z2M en `zigbee2mqtt/bridge/*`: aquí solo hacemos de intermediarios para que la
+// UI no tenga que hablar MQTT.
+const TUYA_PREFIX = process.env.TUYA_PREFIX ?? 'tuya';
+
+interface TuyaCandidate {
+  id: string;
+  name: string;
+  topic: string;
+  hasKey: boolean;
+}
+
+let tuyaCandidates: TuyaCandidate[] = [];
+let tuyaLastRefresh: Date | null = null;
+let tuyaError: string | null = null;
+/** El puente ha dado señales de vida en esta ejecución. */
+let tuyaBridgeSeen = false;
+
 // --- Emparejamiento (permit join) ---
 // Abrir la red Zigbee deja entrar a CUALQUIER dispositivo al alcance mientras la
 // ventana esté abierta, así que siempre con un plazo corto y cierre automático.
@@ -282,6 +362,7 @@ mqttClient.on('connect', () => {
   mqttConnected = true;
   console.log('MQTT conectado');
   mqttClient.subscribe('zigbee2mqtt/#');
+  mqttClient.subscribe(`${TUYA_PREFIX}/bridge/#`);
   for (const device of extraDevices) mqttClient.subscribe(device.mqttTopic);
   // Si tras 5s no hemos recibido bridge/devices (Z2M no está) → modo mock.
   setTimeout(() => {
@@ -296,6 +377,39 @@ mqttClient.on('close', () => { mqttConnected = false; });
 mqttClient.on('offline', () => { mqttConnected = false; });
 
 mqttClient.on('message', async (topic, message) => {
+  // 0) Mensajes del puente Tuya: inventario de la cuenta y errores.
+  if (topic.startsWith(`${TUYA_PREFIX}/bridge/`)) {
+    tuyaBridgeSeen = true;
+    if (topic === `${TUYA_PREFIX}/bridge/devices`) {
+      try {
+        const list = JSON.parse(message.toString());
+        if (Array.isArray(list)) {
+          tuyaCandidates = list
+            .filter((d: any) => d && typeof d.id === 'string' && typeof d.topic === 'string')
+            .map((d: any) => ({
+              id: d.id,
+              name: typeof d.name === 'string' ? d.name : d.id,
+              topic: d.topic,
+              hasKey: d.hasKey !== false,
+            }));
+          tuyaLastRefresh = new Date();
+          tuyaError = null;
+        }
+      } catch (e) {
+        console.warn('tuya bridge/devices: JSON inválido', e);
+      }
+    } else if (topic === `${TUYA_PREFIX}/bridge/response/refresh`) {
+      try {
+        const r = JSON.parse(message.toString());
+        tuyaError = r?.error ?? null;
+        if (tuyaError) console.warn('refresh de Tuya falló:', tuyaError);
+      } catch {
+        // ignorar
+      }
+    }
+    return;
+  }
+
   // 1) Inventario real de Z2M (mensaje retenido) → actualizar discovery.
   if (topic === 'zigbee2mqtt/bridge/devices') {
     try {
@@ -623,6 +737,84 @@ app.post('/api/pairing', (req, res) => {
 // --- Nombre visible de un dispositivo ---
 // Se indexa por dirección IEEE, no por entityId: el entityId es el friendly_name
 // de Z2M (topic MQTT + sensor_id del histórico) y debe quedarse quieto.
+// --- Dispositivos que no son Zigbee ---
+// Se dan de alta y de baja en caliente: nada de editar el compose ni reiniciar.
+
+app.get('/api/devices/mqtt', (_req, res) => {
+  res.json(extraDevices);
+});
+
+app.post('/api/devices/mqtt', async (req, res) => {
+  if (!dbReady) {
+    res.status(503).json({ error: 'Sin base de datos no se pueden dar de alta dispositivos' });
+    return;
+  }
+  // Validamos con el mismo parser que la semilla del entorno: una sola forma de
+  // decidir qué es un dispositivo válido.
+  const [device] = parseExtraDevices(JSON.stringify([req.body]));
+  if (!device) {
+    res.status(400).json({ error: 'Faltan `entityId` o `mqttTopic`, o no son válidos' });
+    return;
+  }
+  if (findSensor(device.entityId)) {
+    res.status(409).json({ error: `Ya existe un dispositivo con entityId "${device.entityId}"` });
+    return;
+  }
+  try {
+    await db.insert(mqttDevices).values(deviceToRow(device));
+  } catch (e) {
+    // Choca con la restricción única del topic: dos dispositivos no pueden
+    // escuchar el mismo, se pisarían el estado.
+    res.status(409).json({ error: `No se pudo dar de alta: ${(e as Error).message}` });
+    return;
+  }
+  await loadMqttDevices();
+  res.status(201).json(device);
+});
+
+app.delete('/api/devices/mqtt/:entityId', async (req, res) => {
+  if (!dbReady) {
+    res.status(503).json({ error: 'Sin base de datos no se pueden borrar dispositivos' });
+    return;
+  }
+  const { entityId } = req.params;
+  await db.delete(mqttDevices).where(eq(mqttDevices.entityId, entityId));
+  const gone = extraByTopic.get(
+    extraDevices.find(d => d.entityId === entityId)?.mqttTopic ?? '',
+  );
+  if (gone) mqttClient.unsubscribe(gone.mqttTopic);
+  await loadMqttDevices();
+  // Idempotente: borrar algo que ya no está no es un error.
+  res.json({ ok: true, entityId });
+});
+
+// --- Descubrimiento Tuya ---
+
+app.get('/api/tuya', (_req, res) => {
+  const adoptedTopics = new Set(extraDevices.map(d => d.mqttTopic));
+  res.json({
+    bridgeSeen: tuyaBridgeSeen,
+    lastRefresh: tuyaLastRefresh,
+    error: tuyaError,
+    // Solo lo que aún no está en el dashboard: lo demás ya es una tarjeta.
+    available: tuyaCandidates.filter(c => !adoptedTopics.has(c.topic)),
+  });
+});
+
+app.post('/api/tuya/refresh', (_req, res) => {
+  if (!mqttConnected) {
+    res.status(503).json({ error: 'Sin conexión MQTT' });
+    return;
+  }
+  if (!tuyaBridgeSeen) {
+    res.status(503).json({ error: 'El puente Tuya no responde' });
+    return;
+  }
+  tuyaError = null;
+  mqttClient.publish(`${TUYA_PREFIX}/bridge/request/refresh`, '{}');
+  res.json({ ok: true });
+});
+
 function findByIeee(ieeeAddress: string) {
   return getAllSensors().find(s => s.ieeeAddress === ieeeAddress);
 }
@@ -691,6 +883,8 @@ async function runMigrations(): Promise<void> {
     dbReady = true;
     console.log('Migraciones aplicadas');
     await loadDeviceNames();
+    await seedMqttDevices();
+    await loadMqttDevices();
   } catch (e) {
     console.error('Fallo aplicando migraciones → sin persistencia:', (e as Error).message);
   }

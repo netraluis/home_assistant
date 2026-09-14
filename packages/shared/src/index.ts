@@ -129,3 +129,35 @@ export interface Scene {
   name: string;
   actions: SceneAction[];
 }
+
+// --- Dispositivos que no vienen de Zigbee2MQTT ---
+
+/** Fila de GET /api/devices/mqtt y body de POST (los opcionales tienen defecto). */
+export interface MqttDeviceInput {
+  entityId: string;
+  mqttTopic: string;
+  name?: string;
+  type?: SensorType;
+  icon?: string;
+  vendor?: string;
+  model?: string;
+  controllable?: boolean;
+}
+
+/** Dispositivo Tuya visto por el puente y todavía no adoptado. */
+export interface TuyaCandidate {
+  id: string;
+  name: string;
+  topic: string;
+  /** false = está en la cuenta pero sin local_key, no se puede controlar. */
+  hasKey: boolean;
+}
+
+/** Respuesta de GET /api/tuya */
+export interface TuyaStatus {
+  /** El puente ha dado señales de vida; si es false, el panel no se enseña. */
+  bridgeSeen: boolean;
+  lastRefresh: string | null;
+  error: string | null;
+  available: TuyaCandidate[];
+}
