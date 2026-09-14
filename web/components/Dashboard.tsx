@@ -7,6 +7,7 @@ import { Alert02Icon, InboxIcon, RouterIcon } from "@hugeicons/core-free-icons";
 import { api } from "@/lib/api";
 import { SensorCard } from "@/components/SensorCard";
 import { PairingPanel } from "@/components/PairingPanel";
+import { WifiDevicesPanel } from "@/components/WifiDevicesPanel";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Logo } from "@/components/Logo";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -85,6 +86,8 @@ export function Dashboard() {
       {loaded && status?.discovery?.source === "zigbee2mqtt" && (
         <PairingPanel onDeviceAdded={refresh} />
       )}
+
+      {loaded && <WifiDevicesPanel onAdopted={refresh} />}
 
       {!loaded ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
