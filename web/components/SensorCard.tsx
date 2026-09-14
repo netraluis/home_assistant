@@ -14,7 +14,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
-import { isStale, readState } from "@/lib/sensor";
+import { isStale, readPower, readState } from "@/lib/sensor";
 import { SENSOR_ICON } from "@/lib/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,7 @@ export function SensorCard({
   const [optimistic, setOptimistic] = useState<boolean | null>(null);
   const { on, raw, value } = readState(sensor);
   const stale = isStale(sensor);
+  const consumption = readPower(sensor);
   const canControl =
     sensor.controllable ??
     ((sensor.type === "light" || sensor.type === "toggle") &&
@@ -152,6 +153,8 @@ export function SensorCard({
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
+        {consumption && <Consumption {...consumption} />}
+
         {canControl ? (
           <div className="flex items-center justify-between gap-3">
             <Label htmlFor={switchId} className="cursor-pointer">
@@ -329,4 +332,32 @@ function StateBadge({
     );
   }
   return <Badge variant="destructive">{raw}</Badge>;
+}
+
+/**
+ * Consumo en vivo. La potencia va grande porque es el dato que se mira; el
+ * resto acompaña en una línea, sin competir por la atención.
+ */
+function Consumption({ power, rest }: NonNullable<ReturnType<typeof readPower>>) {
+  return (
+    <div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-heading text-3xl leading-none font-semibold tabular-nums">
+          {power.value}
+        </span>
+        <span className="text-xs font-semibold tracking-widest uppercase text-muted-foreground">
+          {power.unit}
+        </span>
+      </div>
+      {rest.length > 0 && (
+        <p className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] font-semibold tracking-widest uppercase text-muted-foreground">
+          {rest.map((m) => (
+            <span key={m.label} className="tabular-nums">
+              {m.label} {m.value} {m.unit}
+            </span>
+          ))}
+        </p>
+      )}
+    </div>
+  );
 }
